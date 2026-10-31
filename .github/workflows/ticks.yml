@@ -9,6 +9,15 @@ on:
       limit:
         description: "每片只做前N个（0=全部）"
         default: "0"
+      targets:
+        description: "目标清单文件"
+        default: "tick_targets.csv"
+      prefix:
+        description: "输出文件名前缀"
+        default: ""
+      fullday:
+        description: "保留全天分钟线(1=是)"
+        default: "0"
 
 permissions:
   contents: write
@@ -38,11 +47,12 @@ jobs:
           sparse-checkout: |
             tick_pull.py
             tick_targets.csv
+            tick_targets_zt.csv
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: pip install pandas pyarrow mootdx
-      - run: python tick_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --limit ${{ github.event.inputs.limit }}
+      - run: python tick_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --limit ${{ github.event.inputs.limit }} --targets ${{ github.event.inputs.targets }} --prefix "${{ github.event.inputs.prefix }}" $( [ "${{ github.event.inputs.fullday }}" = "1" ] && echo --fullday )
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload tick-data ticks/*.csv.gz --clobber -R ${{ github.repository }}

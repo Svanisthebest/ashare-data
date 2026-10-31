@@ -9,7 +9,8 @@ import argparse, os, time
 import pandas as pd
 from mootdx.quotes import Quotes
 
-KEEP = lambda t: ("09:25" <= t <= "10:30") or ("14:30" <= t <= "15:00")
+KEEP_DEFAULT = lambda t: ("09:25" <= t <= "10:30") or ("14:30" <= t <= "15:00")
+KEEP = KEEP_DEFAULT
 
 def connect():
     for i in range(5):
@@ -39,12 +40,18 @@ def main():
     ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", default="ticks")
+    ap.add_argument("--targets", default="tick_targets.csv")
+    ap.add_argument("--prefix", default="")
+    ap.add_argument("--fullday", action="store_true")
     a = ap.parse_args()
-    tg = pd.read_csv("tick_targets.csv", dtype={"d1": str, "code": str})
+    tg = pd.read_csv(a.targets, dtype={"d1": str, "code": str})
     tg = tg.iloc[a.shard::a.nshards]
     if a.limit:
         tg = tg.head(a.limit)
     print(f"分片{a.shard}: {len(tg)} 个(股票,日期)", flush=True)
+    global KEEP
+    if a.fullday:
+        KEEP = lambda t: True
     c = connect(); bars, auc, t0, fails = [], [], time.time(), 0
     for i, (d, code) in enumerate(zip(tg.d1, tg.code)):
         try:
@@ -71,7 +78,7 @@ def main():
         if i % 200 == 0:
             print(f"{i}/{len(tg)} 用时{time.time() - t0:.0f}s 失败{fails}", flush=True)
     os.makedirs(a.out, exist_ok=True)
-    tag = f"{a.shard:02d}of{a.nshards:02d}"
+    tag = f"{a.prefix}{a.shard:02d}of{a.nshards:02d}"
     pd.DataFrame(auc).to_csv(f"{a.out}/auction_{tag}.csv.gz", index=False)
     if bars:
         b = pd.concat(bars, ignore_index=True)
