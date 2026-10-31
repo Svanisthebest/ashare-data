@@ -1,0 +1,42 @@
+name: 盘中强势股全天分时
+on:
+  workflow_dispatch:
+    inputs:
+      nshards:
+        default: "12"
+      targets:
+        default: "tick_targets_intraday.csv"
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.m.outputs.shards }}
+    steps:
+      - id: m
+        run: echo "shards=$(python3 -c "import json;print(json.dumps(list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view minute-data -R ${{ github.repository }} || gh release create minute-data -R ${{ github.repository }} -t "盘中强势股全天分时" -n "minute_pull.py 生成"
+  pull:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            minute_pull.py
+            tick_targets_intraday.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas mootdx
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python minute_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --targets ${{ github.event.inputs.targets }}
