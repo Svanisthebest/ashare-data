@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 用 baostock 拉全市场（沪深主板、创业板、科创板）5 分钟线，只保留研究需要的时段，
-按分片保存为 parquet，由工作流上传到 GitHub Release（不进仓库，避免体积问题）。
+按分片保存为 csv.gz，由工作流上传到 GitHub Release（不进仓库，避免体积问题）。
 
 保留时段：9:35–10:30（开盘第一小时，前 12 根）和 14:30–15:00（尾盘 6 根）。
 用法：
@@ -71,13 +71,13 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     import json, subprocess
     tag = f"{a.start[:4]}_s{a.sample}_{a.shard:02d}of{a.nshards:02d}"
-    f = os.path.join(a.out, f"min5_{tag}.parquet")
+    f = os.path.join(a.out, f"min5_{tag}.csv.gz")
     pf = os.path.join(a.out, f"progress_{tag}.json")
     repo = os.environ.get("GITHUB_REPOSITORY")
     # 断点续传：先从 Release 取回已有的分片
     if repo:
         subprocess.run(["gh", "release", "download", "min5-data", "-R", repo, "-p", os.path.basename(f), "-D", a.out, "--clobber"], check=False)
-    old = pd.read_parquet(f) if os.path.exists(f) else None
+    old = pd.read_csv(f, dtype={"code": str, "time": str}) if os.path.exists(f) else None
     done = set(old.code.unique()) if old is not None else set()
     todo = [c for c in codes if c[3:] not in done]
     print(f"已完成 {len(done)}，待拉 {len(todo)}", flush=True)
@@ -87,7 +87,7 @@ def main():
         if not parts:
             return
         df = pd.concat(parts, ignore_index=True)
-        df.to_parquet(f, index=False, compression="zstd")
+        df.to_csv(f, index=False)
         json.dump({"done": int(df.code.nunique()), "total": len(codes), "rows": len(df), "avg_sec": round(sum(secs) / max(len(secs), 1), 1),
                    "elapsed_min": round((time.time() - t0) / 60, 1), "final": final}, open(pf, "w"))
         if repo:

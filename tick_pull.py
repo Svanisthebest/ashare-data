@@ -3,7 +3,7 @@
 用通达信历史逐笔成交，为候选股票的指定交易日合成：
   - 9:25 集合竞价成交（价格、手数）
   - 9:30–10:30、14:30–15:00 每分钟的开高低收、成交手数、主动买卖手数
-输入 tick_targets.csv（列 d1=YYYYMMDD, code），按分片处理，输出 parquet。
+输入 tick_targets.csv（列 d1=YYYYMMDD, code），按分片处理，输出 csv.gz。
 """
 import argparse, os, time
 import pandas as pd
@@ -72,12 +72,12 @@ def main():
             print(f"{i}/{len(tg)} 用时{time.time() - t0:.0f}s 失败{fails}", flush=True)
     os.makedirs(a.out, exist_ok=True)
     tag = f"{a.shard:02d}of{a.nshards:02d}"
-    pd.DataFrame(auc).to_parquet(f"{a.out}/auction_{tag}.parquet", index=False)
+    pd.DataFrame(auc).to_csv(f"{a.out}/auction_{tag}.csv.gz", index=False)
     if bars:
         b = pd.concat(bars, ignore_index=True)
         for col in ["open", "high", "low", "close"]:
             b[col] = b[col].astype("float32")
-        b.to_parquet(f"{a.out}/minbars_{tag}.parquet", index=False, compression="zstd")
+        b.to_csv(f"{a.out}/minbars_{tag}.csv.gz", index=False)
     print("完成", len(auc), "失败", fails, f"{time.time() - t0:.0f}s")
 
 if __name__ == "__main__":
