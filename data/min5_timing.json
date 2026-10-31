@@ -1,0 +1,43 @@
+{
+ "bs_login": [
+  "0",
+  "success",
+  0.8
+ ],
+ "bs_sh.600519_2026-2026": {
+  "rows": 9504,
+  "sec": 27.6,
+  "err": "success"
+ },
+ "bs_sz.300750_2026-2026": {
+  "rows": 9504,
+  "sec": 11.6,
+  "err": "success"
+ },
+ "bs_sh.600000_2022-2022": {
+  "rows": 11616,
+  "sec": 10.8,
+  "err": "success"
+ },
+ "bs_sz.000001_2022-2026": {
+  "rows": 56016,
+  "sec": 93.2,
+  "err": "success"
+ },
+ "tdx_connect_sec": 17.1,
+ "tdx_history_minute_20req": {
+  "rows": 4800,
+  "sec": 14.0
+ },
+ "tdx_ticks_full_day": {
+  "pages": 4,
+  "sec": 1.0,
+  "earliest_tick": {
+   "time": "09:25",
+   "price": 1715.0,
+   "vol": 517,
+   "buyorsell": 2,
+   "volume": 517
+  }
+ }
+}
