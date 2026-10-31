@@ -11,7 +11,7 @@ on:
         default: "12"
       sample:
         description: "随机抽样只数（0=全部）"
-        default: "600"
+        default: "300"
       limit:
         description: "每片只拉前N只（0=全部，测试用）"
         default: "0"
@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 340
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 12
       matrix:
         shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:
