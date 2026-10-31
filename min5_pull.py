@@ -83,16 +83,23 @@ def main():
     print(f"已完成 {len(done)}，待拉 {len(todo)}", flush=True)
     parts, t0, secs = ([old] if old is not None else []), time.time(), []
 
+    def beat(stage, code=""):
+        json.dump({"stage": stage, "code": code, "done_this_run": len(secs), "todo": len(todo), "resumed": len(done),
+                   "last_sec": round(secs[-1], 1) if secs else None, "avg_sec": round(sum(secs) / max(len(secs), 1), 1),
+                   "elapsed_min": round((time.time() - t0) / 60, 1), "utc": time.strftime("%H:%M:%S", time.gmtime())}, open(pf, "w"))
+        if repo:
+            subprocess.run(["gh", "release", "upload", "min5-data", pf, "--clobber", "-R", repo], check=False)
+
     def save(final=False):
         if not parts:
             return
         df = pd.concat(parts, ignore_index=True)
         df.to_csv(f, index=False)
-        json.dump({"done": int(df.code.nunique()), "total": len(codes), "rows": len(df), "avg_sec": round(sum(secs) / max(len(secs), 1), 1),
-                   "elapsed_min": round((time.time() - t0) / 60, 1), "final": final}, open(pf, "w"))
         if repo:
-            subprocess.run(["gh", "release", "upload", "min5-data", f, pf, "--clobber", "-R", repo], check=False)
+            subprocess.run(["gh", "release", "upload", "min5-data", f, "--clobber", "-R", repo], check=False)
+        beat("final" if final else "saved")
 
+    beat("start")
     for i, c in enumerate(todo):
         t1 = time.time()
         rows = pull(bs, c, a.start, a.end)
@@ -106,6 +113,7 @@ def main():
             df["date"] = pd.to_datetime(df.date)
             parts.append(df)
         print(f"{i + 1}/{len(todo)} {c} 行{len(rows)} {secs[-1]:.0f}s", flush=True)
+        beat("running", c)
         if (i + 1) % 10 == 0:
             save()
     bs.logout()
