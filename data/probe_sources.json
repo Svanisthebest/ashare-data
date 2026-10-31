@@ -1,0 +1,744 @@
+{
+ "tdx_1min_bars_600519": {
+  "bars": 0,
+  "earliest": null
+ },
+ "tdx_5min_bars_600519": {
+  "bars": 0,
+  "earliest": null
+ },
+ "tdx_history_minute_600519_20220104": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 2066.0,
+    "vol": 1753,
+    "volume": 1753
+   },
+   {
+    "price": 2057.0,
+    "vol": 592,
+    "volume": 592
+   },
+   {
+    "price": 2045.66,
+    "vol": 448,
+    "volume": 448
+   }
+  ]
+ },
+ "tdx_history_ticks_600519_20220104": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:00",
+    "price": 2043.05,
+    "vol": 5,
+    "buyorsell": 0,
+    "volume": 5
+   },
+   {
+    "time": "13:00",
+    "price": 2043.9,
+    "vol": 11,
+    "buyorsell": 0,
+    "volume": 11
+   },
+   {
+    "time": "13:00",
+    "price": 2043.0,
+    "vol": 8,
+    "buyorsell": 0,
+    "volume": 8
+   }
+  ],
+  "last": [
+   {
+    "time": "14:57",
+    "price": 2051.23,
+    "vol": 1,
+    "buyorsell": 1,
+    "volume": 1
+   },
+   {
+    "time": "15:00",
+    "price": 2051.23,
+    "vol": 298,
+    "buyorsell": 2,
+    "volume": 298
+   }
+  ]
+ },
+ "tdx_history_minute_600519_20230104": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 1732.0,
+    "vol": 813,
+    "volume": 813
+   },
+   {
+    "price": 1731.0,
+    "vol": 210,
+    "volume": 210
+   },
+   {
+    "price": 1729.01,
+    "vol": 177,
+    "volume": 177
+   }
+  ]
+ },
+ "tdx_history_ticks_600519_20230104": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "11:22",
+    "price": 1725.17,
+    "vol": 2,
+    "buyorsell": 1,
+    "volume": 2
+   },
+   {
+    "time": "11:22",
+    "price": 1725.16,
+    "vol": 5,
+    "buyorsell": 1,
+    "volume": 5
+   },
+   {
+    "time": "11:22",
+    "price": 1725.14,
+    "vol": 15,
+    "buyorsell": 1,
+    "volume": 15
+   }
+  ],
+  "last": [
+   {
+    "time": "14:57",
+    "price": 1720.5,
+    "vol": 1,
+    "buyorsell": 1,
+    "volume": 1
+   },
+   {
+    "time": "15:00",
+    "price": 1725.01,
+    "vol": 448,
+    "buyorsell": 2,
+    "volume": 448
+   }
+  ]
+ },
+ "tdx_history_minute_600519_20240103": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 1686.02,
+    "vol": 638,
+    "volume": 638
+   },
+   {
+    "price": 1691.0,
+    "vol": 292,
+    "volume": 292
+   },
+   {
+    "price": 1694.68,
+    "vol": 420,
+    "volume": 420
+   }
+  ]
+ },
+ "tdx_history_ticks_600519_20240103": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "11:24",
+    "price": 1682.9,
+    "vol": 1,
+    "buyorsell": 0,
+    "volume": 1
+   },
+   {
+    "time": "11:24",
+    "price": 1682.02,
+    "vol": 3,
+    "buyorsell": 1,
+    "volume": 3
+   },
+   {
+    "time": "11:24",
+    "price": 1682.01,
+    "vol": 10,
+    "buyorsell": 1,
+    "volume": 10
+   }
+  ],
+  "last": [
+   {
+    "time": "14:56",
+    "price": 1694.5,
+    "vol": 8,
+    "buyorsell": 0,
+    "volume": 8
+   },
+   {
+    "time": "15:00",
+    "price": 1694.0,
+    "vol": 322,
+    "buyorsell": 2,
+    "volume": 322
+   }
+  ]
+ },
+ "tdx_history_minute_600519_20250103": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 1492.17,
+    "vol": 961,
+    "volume": 961
+   },
+   {
+    "price": 1486.69,
+    "vol": 413,
+    "volume": 413
+   },
+   {
+    "price": 1487.92,
+    "vol": 153,
+    "volume": 153
+   }
+  ]
+ },
+ "tdx_history_ticks_600519_20250103": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:10",
+    "price": 1487.94,
+    "vol": 1,
+    "buyorsell": 0,
+    "volume": 1
+   },
+   {
+    "time": "13:10",
+    "price": 1487.94,
+    "vol": 5,
+    "buyorsell": 0,
+    "volume": 5
+   },
+   {
+    "time": "13:10",
+    "price": 1487.79,
+    "vol": 2,
+    "buyorsell": 0,
+    "volume": 2
+   }
+  ],
+  "last": [
+   {
+    "time": "14:56",
+    "price": 1474.0,
+    "vol": 4,
+    "buyorsell": 1,
+    "volume": 4
+   },
+   {
+    "time": "15:00",
+    "price": 1475.0,
+    "vol": 539,
+    "buyorsell": 2,
+    "volume": 539
+   }
+  ]
+ },
+ "tdx_history_minute_600519_20260105": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 1389.65,
+    "vol": 2545,
+    "volume": 2545
+   },
+   {
+    "price": 1392.0,
+    "vol": 1317,
+    "volume": 1317
+   },
+   {
+    "price": 1393.27,
+    "vol": 1054,
+    "volume": 1054
+   }
+  ]
+ },
+ "tdx_history_ticks_600519_20260105": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:18",
+    "price": 1413.31,
+    "vol": 8,
+    "buyorsell": 1,
+    "volume": 8
+   },
+   {
+    "time": "13:18",
+    "price": 1413.01,
+    "vol": 6,
+    "buyorsell": 1,
+    "volume": 6
+   },
+   {
+    "time": "13:19",
+    "price": 1413.01,
+    "vol": 3,
+    "buyorsell": 1,
+    "volume": 3
+   }
+  ],
+  "last": [
+   {
+    "time": "14:59",
+    "price": 1426.0,
+    "vol": 0,
+    "buyorsell": 8,
+    "volume": 0
+   },
+   {
+    "time": "15:00",
+    "price": 1426.0,
+    "vol": 546,
+    "buyorsell": 2,
+    "volume": 546
+   }
+  ]
+ },
+ "tdx_1min_bars_300750": {
+  "bars": 0,
+  "earliest": null
+ },
+ "tdx_5min_bars_300750": {
+  "bars": 0,
+  "earliest": null
+ },
+ "tdx_history_minute_300750_20220104": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 600.58,
+    "vol": 6329,
+    "volume": 6329
+   },
+   {
+    "price": 598.6,
+    "vol": 2614,
+    "volume": 2614
+   },
+   {
+    "price": 595.0,
+    "vol": 1544,
+    "volume": 1544
+   }
+  ]
+ },
+ "tdx_history_ticks_300750_20220104": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:17",
+    "price": 566.17,
+    "vol": 46,
+    "buyorsell": 1,
+    "volume": 46
+   },
+   {
+    "time": "13:17",
+    "price": 566.17,
+    "vol": 18,
+    "buyorsell": 1,
+    "volume": 18
+   },
+   {
+    "time": "13:17",
+    "price": 566.13,
+    "vol": 13,
+    "buyorsell": 1,
+    "volume": 13
+   }
+  ],
+  "last": [
+   {
+    "time": "15:06",
+    "price": 568.88,
+    "vol": 1,
+    "buyorsell": 5,
+    "volume": 1
+   },
+   {
+    "time": "15:06",
+    "price": 568.88,
+    "vol": 1,
+    "buyorsell": 5,
+    "volume": 1
+   }
+  ]
+ },
+ "tdx_history_minute_300750_20230104": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 385.49,
+    "vol": 4687,
+    "volume": 4687
+   },
+   {
+    "price": 383.99,
+    "vol": 2393,
+    "volume": 2393
+   },
+   {
+    "price": 383.12,
+    "vol": 1667,
+    "volume": 1667
+   }
+  ]
+ },
+ "tdx_history_ticks_300750_20230104": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:16",
+    "price": 383.74,
+    "vol": 24,
+    "buyorsell": 0,
+    "volume": 24
+   },
+   {
+    "time": "13:16",
+    "price": 383.97,
+    "vol": 101,
+    "buyorsell": 0,
+    "volume": 101
+   },
+   {
+    "time": "13:17",
+    "price": 384.49,
+    "vol": 43,
+    "buyorsell": 0,
+    "volume": 43
+   }
+  ],
+  "last": [
+   {
+    "time": "15:08",
+    "price": 384.01,
+    "vol": 1,
+    "buyorsell": 5,
+    "volume": 1
+   },
+   {
+    "time": "15:15",
+    "price": 384.01,
+    "vol": 1,
+    "buyorsell": 5,
+    "volume": 1
+   }
+  ]
+ },
+ "tdx_history_minute_300750_20240103": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 154.63,
+    "vol": 5894,
+    "volume": 5894
+   },
+   {
+    "price": 155.46,
+    "vol": 4716,
+    "volume": 4716
+   },
+   {
+    "price": 156.11,
+    "vol": 2909,
+    "volume": 2909
+   }
+  ]
+ },
+ "tdx_history_ticks_300750_20240103": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:17",
+    "price": 154.54,
+    "vol": 31,
+    "buyorsell": 1,
+    "volume": 31
+   },
+   {
+    "time": "13:17",
+    "price": 154.52,
+    "vol": 11,
+    "buyorsell": 1,
+    "volume": 11
+   },
+   {
+    "time": "13:17",
+    "price": 154.55,
+    "vol": 48,
+    "buyorsell": 0,
+    "volume": 48
+   }
+  ],
+  "last": [
+   {
+    "time": "15:16",
+    "price": 155.8,
+    "vol": 2,
+    "buyorsell": 5,
+    "volume": 2
+   },
+   {
+    "time": "15:22",
+    "price": 155.8,
+    "vol": 4,
+    "buyorsell": 5,
+    "volume": 4
+   }
+  ]
+ },
+ "tdx_history_minute_300750_20250103": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 259.3,
+    "vol": 5800,
+    "volume": 5800
+   },
+   {
+    "price": 259.6,
+    "vol": 1913,
+    "volume": 1913
+   },
+   {
+    "price": 259.49,
+    "vol": 1352,
+    "volume": 1352
+   }
+  ]
+ },
+ "tdx_history_ticks_300750_20250103": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:16",
+    "price": 260.63,
+    "vol": 21,
+    "buyorsell": 1,
+    "volume": 21
+   },
+   {
+    "time": "13:16",
+    "price": 260.64,
+    "vol": 36,
+    "buyorsell": 0,
+    "volume": 36
+   },
+   {
+    "time": "13:16",
+    "price": 260.63,
+    "vol": 73,
+    "buyorsell": 1,
+    "volume": 73
+   }
+  ],
+  "last": [
+   {
+    "time": "15:07",
+    "price": 257.63,
+    "vol": 5,
+    "buyorsell": 5,
+    "volume": 5
+   },
+   {
+    "time": "15:10",
+    "price": 257.63,
+    "vol": 2,
+    "buyorsell": 5,
+    "volume": 2
+   }
+  ]
+ },
+ "tdx_history_minute_300750_20260105": {
+  "rows": 240,
+  "head": [
+   {
+    "price": 369.63,
+    "vol": 10741,
+    "volume": 10741
+   },
+   {
+    "price": 371.71,
+    "vol": 5305,
+    "volume": 5305
+   },
+   {
+    "price": 371.55,
+    "vol": 5100,
+    "volume": 5100
+   }
+  ]
+ },
+ "tdx_history_ticks_300750_20260105": {
+  "rows": 2000,
+  "first": [
+   {
+    "time": "13:18",
+    "price": 372.25,
+    "vol": 84,
+    "buyorsell": 1,
+    "volume": 84
+   },
+   {
+    "time": "13:18",
+    "price": 372.24,
+    "vol": 148,
+    "buyorsell": 2,
+    "volume": 148
+   },
+   {
+    "time": "13:18",
+    "price": 372.23,
+    "vol": 51,
+    "buyorsell": 0,
+    "volume": 51
+   }
+  ],
+  "last": [
+   {
+    "time": "15:29",
+    "price": 377.5,
+    "vol": 1,
+    "buyorsell": 5,
+    "volume": 1
+   },
+   {
+    "time": "15:29",
+    "price": 377.5,
+    "vol": 2,
+    "buyorsell": 5,
+    "volume": 2
+   }
+  ]
+ },
+ "em_kline_klt1_600519": {
+  "bars": 240,
+  "earliest": "2026-10-30 09:31",
+  "latest": "2026-10-30 15:00"
+ },
+ "em_kline_klt5_600519": {
+  "bars": 1488,
+  "earliest": "2026-09-10 09:35",
+  "latest": "2026-10-30 15:00"
+ },
+ "em_kline_klt15_600519": {
+  "bars": 496,
+  "earliest": "2026-09-10 09:45",
+  "latest": "2026-10-30 15:00"
+ },
+ "em_kline_klt30_600519": {
+  "bars": 248,
+  "earliest": "2026-09-10 10:00",
+  "latest": "2026-10-30 15:00"
+ },
+ "em_kline_klt60_600519": {
+  "bars": 124,
+  "earliest": "2026-09-10 10:30",
+  "latest": "2026-10-30 15:00"
+ },
+ "em_trends_ndays5_with_auction": {
+  "rows": 1205,
+  "earliest": "2026-10-26 09:30",
+  "first3": [
+   "2026-10-26 09:30,0.00,1325.40,1325.40,1325.40,905,119948700.00,1325.400",
+   "2026-10-26 09:31,0.00,1333.00,1334.71,1324.79,744,98974857.00,1327.614",
+   "2026-10-26 09:32,0.00,1333.57,1333.90,1331.39,457,60894591.00,1328.671"
+  ]
+ },
+ "em_trends_ndays30": {
+  "rows": 0,
+  "earliest": null,
+  "first3": []
+ },
+ "baostock_5min_600519": {
+  "rows": 79344,
+  "earliest": [
+   "2020-01-02",
+   "20200102093500000",
+   "1128.0000",
+   "1130.2000",
+   "2437904"
+  ],
+  "latest": [
+   "2026-10-30",
+   "20261030150000000",
+   "1390.9800",
+   "1392.0500",
+   "358974"
+  ],
+  "err": "success"
+ },
+ "baostock_15min_600519": {
+  "rows": 26448,
+  "earliest": [
+   "2020-01-02",
+   "20200102094500000",
+   "1128.0000",
+   "1119.0000",
+   "4399123"
+  ],
+  "latest": [
+   "2026-10-30",
+   "20261030150000000",
+   "1390.2900",
+   "1392.0500",
+   "746944"
+  ],
+  "err": "success"
+ },
+ "baostock_60min_600519": {
+  "rows": 6612,
+  "earliest": [
+   "2020-01-02",
+   "20200102103000000",
+   "1128.0000",
+   "1138.1500",
+   "8265713"
+  ],
+  "latest": [
+   "2026-10-30",
+   "20261030150000000",
+   "1389.3900",
+   "1392.0500",
+   "1717442"
+  ],
+  "err": "success"
+ },
+ "sina_1min_600519": {
+  "bars": 0,
+  "earliest": null
+ },
+ "sina_5min_600519": {
+  "bars": 0,
+  "earliest": null
+ },
+ "sina_15min_600519": {
+  "bars": 0,
+  "earliest": null
+ },
+ "_run_at": "2026-10-31T07:29:23.077733"
+}
