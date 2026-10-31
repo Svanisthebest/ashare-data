@@ -3,7 +3,7 @@ name: A股每日数据
 on:
   schedule:
     - cron: "0 11 * * 1-5"    # 北京时间 19:00（通达信盘后包通常收盘后数小时发布）
-    - cron: "30 13 * * 1-5"   # 北京时间 21:30，补跑一次，补上第一次没拿到的模块
+    - cron: "30 13 * * 1-5"   # 北京时间 21:30，补跑一次
   workflow_dispatch:
     inputs:
       date:
@@ -11,9 +11,13 @@ on:
         required: false
         default: ""
       backfill:
-        description: "先补齐最近N个交易日历史（首次运行填 130，之后留 0）"
+        description: "补齐最近N个交易日（不用时填 0）"
         required: false
         default: "0"
+      backfill_start:
+        description: "回补起始日 YYYYMMDD，例如 20220101（留空则不用）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -25,7 +29,7 @@ concurrency:
 jobs:
   pull:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -43,11 +47,18 @@ jobs:
           if [ -z "$D" ]; then D=$(TZ=Asia/Shanghai date +%Y%m%d); fi
           B="${{ github.event.inputs.backfill }}"
           if [ -z "$B" ]; then B=0; fi
+          S="${{ github.event.inputs.backfill_start }}"
           echo "date=$D" >> "$GITHUB_OUTPUT"
           echo "backfill=$B" >> "$GITHUB_OUTPUT"
+          echo "start=$S" >> "$GITHUB_OUTPUT"
 
       - name: 拉取数据
-        run: python daily_pull.py --date ${{ steps.d.outputs.date }} --backfill ${{ steps.d.outputs.backfill }} --out data
+        run: |
+          if [ -n "${{ steps.d.outputs.start }}" ]; then
+            python daily_pull.py --date ${{ steps.d.outputs.date }} --backfill-start ${{ steps.d.outputs.start }} --out data
+          else
+            python daily_pull.py --date ${{ steps.d.outputs.date }} --backfill ${{ steps.d.outputs.backfill }} --out data
+          fi
 
       - name: 提交到仓库
         if: always()
