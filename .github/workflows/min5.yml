@@ -37,10 +37,10 @@ jobs:
   pull:
     needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 340
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 4
       matrix:
         shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:
@@ -53,9 +53,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pandas pyarrow baostock
-      - name: 拉取
-        run: python min5_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --start ${{ github.event.inputs.start }} --limit ${{ github.event.inputs.limit }} --sample ${{ github.event.inputs.sample }}
-      - name: 上传到 Release
+      - name: 拉取（每10只自动保存到Release，可断点续传）
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload min5-data min5/*.parquet --clobber -R ${{ github.repository }}
+        run: python min5_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --start ${{ github.event.inputs.start }} --limit ${{ github.event.inputs.limit }} --sample ${{ github.event.inputs.sample }}

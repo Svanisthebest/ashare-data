@@ -69,22 +69,48 @@ def main():
         codes = codes[:a.limit]
     print(f"分片 {a.shard}/{a.nshards}: {len(codes)} 只", flush=True)
     os.makedirs(a.out, exist_ok=True)
-    allrows, t0 = [], time.time()
-    for i, c in enumerate(codes):
+    import json, subprocess
+    tag = f"{a.start[:4]}_s{a.sample}_{a.shard:02d}of{a.nshards:02d}"
+    f = os.path.join(a.out, f"min5_{tag}.parquet")
+    pf = os.path.join(a.out, f"progress_{tag}.json")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    # 断点续传：先从 Release 取回已有的分片
+    if repo:
+        subprocess.run(["gh", "release", "download", "min5-data", "-R", repo, "-p", os.path.basename(f), "-D", a.out, "--clobber"], check=False)
+    old = pd.read_parquet(f) if os.path.exists(f) else None
+    done = set(old.code.unique()) if old is not None else set()
+    todo = [c for c in codes if c[3:] not in done]
+    print(f"已完成 {len(done)}，待拉 {len(todo)}", flush=True)
+    parts, t0, secs = ([old] if old is not None else []), time.time(), []
+
+    def save(final=False):
+        if not parts:
+            return
+        df = pd.concat(parts, ignore_index=True)
+        df.to_parquet(f, index=False, compression="zstd")
+        json.dump({"done": int(df.code.nunique()), "total": len(codes), "rows": len(df), "avg_sec": round(sum(secs) / max(len(secs), 1), 1),
+                   "elapsed_min": round((time.time() - t0) / 60, 1), "final": final}, open(pf, "w"))
+        if repo:
+            subprocess.run(["gh", "release", "upload", "min5-data", f, pf, "--clobber", "-R", repo], check=False)
+
+    for i, c in enumerate(todo):
+        t1 = time.time()
         rows = pull(bs, c, a.start, a.end)
-        allrows += [[c[3:]] + r for r in rows]
-        if i % 50 == 0:
-            print(f"{i}/{len(codes)} {c} 行{len(rows)} 累计{len(allrows)} 用时{time.time() - t0:.0f}s", flush=True)
+        secs.append(time.time() - t1)
+        if rows:
+            df = pd.DataFrame([[c[3:]] + r for r in rows], columns=["code", "date", "time", "open", "high", "low", "close", "volume", "amount"])
+            for k in ["open", "high", "low", "close", "amount"]:
+                df[k] = pd.to_numeric(df[k], errors="coerce").astype("float32")
+            df["volume"] = pd.to_numeric(df.volume, errors="coerce").fillna(0).astype("int64")
+            df["time"] = df.time.str[8:12]
+            df["date"] = pd.to_datetime(df.date)
+            parts.append(df)
+        print(f"{i + 1}/{len(todo)} {c} 行{len(rows)} {secs[-1]:.0f}s", flush=True)
+        if (i + 1) % 10 == 0:
+            save()
     bs.logout()
-    df = pd.DataFrame(allrows, columns=["code", "date", "time", "open", "high", "low", "close", "volume", "amount"])
-    for k in ["open", "high", "low", "close", "amount"]:
-        df[k] = pd.to_numeric(df[k], errors="coerce").astype("float32")
-    df["volume"] = pd.to_numeric(df.volume, errors="coerce").astype("int64")
-    df["time"] = df.time.str[8:12]
-    df["date"] = pd.to_datetime(df.date)
-    f = os.path.join(a.out, f"min5_{a.start[:4]}_{a.shard:02d}of{a.nshards:02d}.parquet")
-    df.to_parquet(f, index=False, compression="zstd")
-    print("保存", f, len(df), "行", round(os.path.getsize(f) / 1e6, 1), "MB")
+    save(final=True)
+    print("完成", f)
 
 
 if __name__ == "__main__":
