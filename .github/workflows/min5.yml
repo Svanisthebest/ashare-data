@@ -9,6 +9,9 @@ on:
       nshards:
         description: "分片数（并行任务数）"
         default: "12"
+      sample:
+        description: "随机抽样只数（0=全部）"
+        default: "600"
       limit:
         description: "每片只拉前N只（0=全部，测试用）"
         default: "0"
@@ -51,7 +54,7 @@ jobs:
           python-version: "3.11"
       - run: pip install pandas pyarrow baostock
       - name: 拉取
-        run: python min5_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --start ${{ github.event.inputs.start }} --limit ${{ github.event.inputs.limit }}
+        run: python min5_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --start ${{ github.event.inputs.start }} --limit ${{ github.event.inputs.limit }} --sample ${{ github.event.inputs.sample }}
       - name: 上传到 Release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -55,10 +55,16 @@ def main():
     ap.add_argument("--end", default=pd.Timestamp.now(tz="Asia/Shanghai").strftime("%Y-%m-%d"))
     ap.add_argument("--out", default="min5")
     ap.add_argument("--limit", type=int, default=0, help="只拉前N只（测试用）")
+    ap.add_argument("--sample", type=int, default=0, help="随机抽N只（固定种子），0=全部")
     a = ap.parse_args()
     import baostock as bs
     bs.login()
-    codes = universe()[a.shard::a.nshards]
+    codes = universe()
+    if a.sample:
+        import random
+        random.Random(42).shuffle(codes)
+        codes = sorted(codes[:a.sample])
+    codes = codes[a.shard::a.nshards]
     if a.limit:
         codes = codes[:a.limit]
     print(f"分片 {a.shard}/{a.nshards}: {len(codes)} 只", flush=True)
