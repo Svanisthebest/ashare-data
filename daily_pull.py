@@ -136,25 +136,58 @@ def save_daily(ymd, root):
     return st
 
 
-def backfill(end_ymd, n, root, q):
-    ok, miss, fail = 0, 0, 0
+def backfill(end_ymd, n, root, q, start_ymd=None, workers=8, budget_min=300):
+    """并行回补通达信日线。n>0 时补最近约 n 个交易日；给了 start_ymd 时补 start_ymd 至 end_ymd 的全部工作日。
+    已存在的日期跳过；节假日（官网404）计为非交易日；超过 budget_min 分钟不再提交新任务，保证后续步骤能提交。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     t0 = time.time()
-    for ymd in trading_days_back(end_ymd, int(n * 1.15) + 10):
-        if ok >= n:
-            break
-        if os.path.exists(os.path.join(root, "daily", f"{ymd}.csv.gz")):
-            ok += 1
-            continue
-        try:
-            save_daily(ymd, root)
-            ok += 1
-        except ValueError:
-            miss += 1          # 节假日 / 未发布
-        except Exception:
-            fail += 1
-        time.sleep(0.3)
-    q.append({"模块": "历史回补", "状态": "成功" if ok else "失败", "行数": ok,
-              "耗时秒": round(time.time() - t0, 1), "错误": f"非交易日{miss}，失败{fail}" if (miss or fail) else ""})
+    if start_ymd:
+        d, end = dt.datetime.strptime(end_ymd, "%Y%m%d"), dt.datetime.strptime(start_ymd, "%Y%m%d")
+        cands = []
+        while d >= end:
+            if d.weekday() < 5:
+                cands.append(d.strftime("%Y%m%d"))
+            d -= dt.timedelta(days=1)
+    else:
+        cands = trading_days_back(end_ymd, int(n * 1.5) + 10)
+    have = {os.path.basename(f)[:8] for f in glob.glob(os.path.join(root, "daily", "*.csv.gz"))}
+    todo = [x for x in cands if x not in have]
+    if not start_ymd:
+        need = max(0, n - len([x for x in cands if x in have]))
+        todo = todo[:int(need * 1.5) + 5]
+    ok, miss, fail, skipped = 0, 0, 0, 0
+
+    def job(ymd):
+        for attempt in range(3):
+            try:
+                save_daily(ymd, root)
+                return "ok"
+            except ValueError:
+                return "miss"
+            except Exception:
+                time.sleep(2 + attempt * 3)
+        return "fail"
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {}
+        it = iter(todo)
+        for ymd in it:
+            if len(futs) >= workers * 2:
+                done = next(as_completed(futs))
+                r = done.result(); futs.pop(done)
+                ok += r == "ok"; miss += r == "miss"; fail += r == "fail"
+            if (time.time() - t0) / 60 > budget_min:
+                skipped = 1 + sum(1 for _ in it)
+                break
+            futs[ex.submit(job, ymd)] = ymd
+        for f in as_completed(futs):
+            r = f.result()
+            ok += r == "ok"; miss += r == "miss"; fail += r == "fail"
+    total = len({os.path.basename(f)[:8] for f in glob.glob(os.path.join(root, "daily", "*.csv.gz"))})
+    print(f"回补：新增 {ok} 天，非交易日 {miss}，失败 {fail}，因时间预算跳过 {skipped}；历史库共 {total} 天")
+    q.append({"模块": "历史回补", "状态": "成功" if ok or not todo else "失败", "行数": total,
+              "耗时秒": round(time.time() - t0, 1),
+              "错误": f"新增{ok}，非交易日{miss}，失败{fail}，未完成{skipped}"})
 
 
 # ----------------------------------------------------------------------------- 全A扫描 + 新鲜度
@@ -228,6 +261,8 @@ def main():
     ap.add_argument("--date", default=dt.datetime.now(CN).strftime("%Y%m%d"))
     ap.add_argument("--out", default="data")
     ap.add_argument("--backfill", type=int, default=0, help="先补齐最近N个交易日的通达信日线")
+    ap.add_argument("--backfill-start", default="", help="回补起始日 YYYYMMDD，补到 --date 为止（优先于 --backfill）")
+    ap.add_argument("--workers", type=int, default=8, help="回补并行下载数")
     ap.add_argument("--watch-file", default="watchlist.txt")
     ap.add_argument("--notice-days", type=int, default=4)
     args = ap.parse_args()
@@ -238,8 +273,8 @@ def main():
     q = []
     s = {"交易日": d, "运行时间(北京)": dt.datetime.now(CN).strftime("%Y-%m-%d %H:%M:%S")}
 
-    if args.backfill:
-        backfill(d, args.backfill, root, q)
+    if args.backfill or args.backfill_start:
+        backfill(d, args.backfill, root, q, start_ymd=args.backfill_start or None, workers=args.workers)
     step(q, "通达信全A日线", lambda: save_daily(d, root))
     scan = step(q, "全A扫描与新鲜度", lambda: market_scan(d, root))
     if scan is not None:
