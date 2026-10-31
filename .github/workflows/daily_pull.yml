@@ -1,0 +1,60 @@
+name: A股每日数据
+
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"    # 北京时间 19:00（通达信盘后包通常收盘后数小时发布）
+    - cron: "30 13 * * 1-5"   # 北京时间 21:30，补跑一次，补上第一次没拿到的模块
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "交易日 YYYYMMDD，留空为北京时间今天"
+        required: false
+        default: ""
+      backfill:
+        description: "先补齐最近N个交易日历史（首次运行填 130，之后留 0）"
+        required: false
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pull
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 确定日期
+        id: d
+        run: |
+          D="${{ github.event.inputs.date }}"
+          if [ -z "$D" ]; then D=$(TZ=Asia/Shanghai date +%Y%m%d); fi
+          B="${{ github.event.inputs.backfill }}"
+          if [ -z "$B" ]; then B=0; fi
+          echo "date=$D" >> "$GITHUB_OUTPUT"
+          echo "backfill=$B" >> "$GITHUB_OUTPUT"
+
+      - name: 拉取数据
+        run: python daily_pull.py --date ${{ steps.d.outputs.date }} --backfill ${{ steps.d.outputs.backfill }} --out data
+
+      - name: 提交到仓库
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "data ${{ steps.d.outputs.date }}" || echo "没有新数据"
+          git pull --rebase
+          git push
