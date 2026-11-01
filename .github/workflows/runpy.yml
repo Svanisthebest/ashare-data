@@ -1,0 +1,35 @@
+name: 运行脚本
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        default: "probe_theme.py"
+      out:
+        default: "data/probe_theme.json"
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ github.event.inputs.script }}
+            data/daily
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests pandas
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python ${{ github.event.inputs.script }}
+      - if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git sparse-checkout disable || true
+          git add ${{ github.event.inputs.out }} || true
+          git commit -m "run ${{ github.event.inputs.script }}" || true
+          git pull --rebase && git push
