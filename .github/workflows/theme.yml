@@ -1,6 +1,9 @@
 name: 题材板块数据
 on:
   workflow_dispatch:
+    inputs:
+      limit:
+        default: ""
   schedule:
     - cron: "50 11 * * 1-5"   # 北京时间 19:50
 permissions:
@@ -26,7 +29,7 @@ jobs:
       - name: 拉取（每20个板块上传一次心跳）
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python theme_pull.py
+        run: LIMIT="${{ github.event.inputs.limit }}" python theme_pull.py
       - name: 提交
         if: always()
         run: |

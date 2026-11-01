@@ -13,15 +13,17 @@ UT = "bd1d9ddb04089700cf9c27f6f7426281"
 OUT = "data/theme"; os.makedirs(OUT, exist_ok=True)
 prog = {"start": time.strftime("%H:%M:%S", time.gmtime())}
 
-def get(url, params, tries=4):
+LASTERR = {}
+def get(url, params, tries=3):
     for i in range(tries):
         try:
             time.sleep(0.15 + random.random() * 0.15)
             r = S.get(url, params=params, timeout=15)
             if r.status_code == 200:
                 return r.json()
+            LASTERR[url[-25:]] = f"status {r.status_code} {r.text[:150]}"
         except Exception as e:
-            err = e
+            LASTERR[url[-25:]] = repr(e)[:200]
         time.sleep(1 + i)
     return None
 
@@ -61,8 +63,12 @@ for i, r in enumerate(B.itertuples()):
                                                                       "ut": UT, "fields1": "f1,f2,f3", "fields2": "f51,f52,f53,f54,f55,f56,f57,f59"})
     for line in ((j or {}).get("data") or {}).get("klines") or []:
         p = line.split(","); kl.append((r.bk, p[0], p[1], p[2], p[3], p[4], p[6], p[7]))
-    if i % 20 == 0:
+    if i < 3:
+        prog[f"dbg_member_{i}"] = len(mem); prog[f"dbg_err_{i}"] = dict(LASTERR); prog[f"dbg_kline_{i}"] = str(j)[:200]
+    if i % 20 == 0 or i < 3:
         beat(done=i + 1, total=len(B), members=len(mem), klines=len(kl))
+    if os.environ.get("LIMIT") and i + 1 >= int(os.environ["LIMIT"]):
+        break
 pd.DataFrame(mem, columns=["bk", "code", "name"]).to_csv(f"{OUT}/members.csv", index=False)
 pd.DataFrame(kl, columns=["bk", "date", "open", "close", "high", "low", "amount", "pct"]).to_csv(f"{OUT}/board_kline.csv.gz", index=False)
 beat(done=len(B), total=len(B), members=len(mem), klines=len(kl), final=True)
