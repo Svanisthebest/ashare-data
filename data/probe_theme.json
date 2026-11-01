@@ -1,0 +1,207 @@
+{
+ "dc_coretheme_boardtype": {
+  "status": 200,
+  "pages": 20651,
+  "count": 103254,
+  "sample": [
+   {
+    "SECUCODE": "603899.SH",
+    "SECURITY_CODE": "603899",
+    "SECURITY_NAME_ABBR": "晨光股份",
+    "BOARD_CODE": "999",
+    "BOARD_NAME": "茅指数",
+    "SELECTED_BOARD_REASON": null,
+    "IS_PRECISE": "0",
+    "BOARD_RANK": 10,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0999",
+    "DERIVE_BOARD_CODE": "BI0999",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   },
+   {
+    "SECUCODE": "601012.SH",
+    "SECURITY_CODE": "601012",
+    "SECURITY_NAME_ABBR": "隆基绿能",
+    "BOARD_CODE": "999",
+    "BOARD_NAME": "茅指数",
+    "SELECTED_BOARD_REASON": null,
+    "IS_PRECISE": "0",
+    "BOARD_RANK": 12,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0999",
+    "DERIVE_BOARD_CODE": "BI0999",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   },
+   {
+    "SECUCODE": "300760.SZ",
+    "SECURITY_CODE": "300760",
+    "SECURITY_NAME_ABBR": "迈瑞医疗",
+    "BOARD_CODE": "999",
+    "BOARD_NAME": "茅指数",
+    "SELECTED_BOARD_REASON": null,
+    "IS_PRECISE": "0",
+    "BOARD_RANK": 13,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0999",
+    "DERIVE_BOARD_CODE": "BI0999",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   }
+  ],
+  "msg": "ok"
+ },
+ "dc_coretheme_boardtype_600261": {
+  "status": 200,
+  "pages": 1,
+  "count": 22,
+  "sample": [
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "BOARD_CODE": "963",
+    "BOARD_NAME": "商业航天",
+    "SELECTED_BOARD_REASON": "2026年半年报显示，报告期内，公司使用自有资金3,000万元参与蓝星光域（上海）航天科技有限公司融资，完成后阳光照明持有其1.0989%股权。蓝星光域成立于2021年5月，专注于全场景激光通信解决方案，核心产品包括星载同轨/异轨激光通信终端、机载平流层激光通信终端等，主要应用于卫星间、星地间高速率通信，业务覆盖空天地海全场景空域。\n",
+    "IS_PRECISE": "1",
+    "BOARD_RANK": 16,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0963",
+    "DERIVE_BOARD_CODE": "BI0963",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   },
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "BOARD_CODE": "879",
+    "BOARD_NAME": "标准普尔",
+    "SELECTED_BOARD_REASON": null,
+    "IS_PRECISE": "0",
+    "BOARD_RANK": 12,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0879",
+    "DERIVE_BOARD_CODE": "BI0879",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   },
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "BOARD_CODE": "867",
+    "BOARD_NAME": "富时罗素",
+    "SELECTED_BOARD_REASON": null,
+    "IS_PRECISE": "0",
+    "BOARD_RANK": 13,
+    "BOARD_YIELD": null,
+    "NEW_BOARD_CODE": "BK0867",
+    "DERIVE_BOARD_CODE": "BI0867",
+    "BOARD_TYPE": null,
+    "BOARD_LEVEL": null
+   }
+  ],
+  "msg": "ok"
+ },
+ "dc_coretheme_content_600261": {
+  "status": 200,
+  "pages": 1,
+  "count": 10,
+  "sample": [
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "KEYWORD": "所属板块",
+    "MAINPOINT": 1,
+    "MAINPOINT_CONTENT": "家用电器 照明设备Ⅱ 照明设备Ⅲ 浙江板块 题材股 百日新高  近期新高 最近多板 东方财富热股 昨日连板_含一字 昨日涨停_含一字 标准普尔 富时罗素 融资融券 可控核聚变 商业航天 氢能源 贬值受益 长江三角 LED概念 参股券商 节能环保",
+    "KEY_CLASSIF": "所属板块",
+    "KEY_CLASSIF_CODE": "001",
+    "IS_POINT": "0",
+    "MAINPOINT_NUM": "要点一",
+    "MAINPOINT_RANK": 1,
+    "IS_HISTORY": "0",
+    "SECURITY_CODE4": "600261"
+   },
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "KEYWORD": "经营范围",
+    "MAINPOINT": 2,
+    "MAINPOINT_CONTENT": "一般项目:照明器具制造;照明器具销售;半导体照明器件制造;半导体照明器件销售;照明器具生产专用设备制造;照明器具生产专用设备销售;电气设备销售;机械电气设备制造;机械电气设备销售;标准化服务;半导体器件专用设备制造;半导体器件专用设备销售;电子元器件制造;电子元器件批发;电子元器件零售;工程和技术研究和试验发展;节能管理服务;新型建筑材料制造(不含危险化学品);光伏设备及元器件制造;光伏设备及元器件销售;家用电器制造;五金产品制造;建筑用金属配件制造;建筑用金属配件销售;建筑装饰、水暖管道零件及其他建筑用金属制品制造;厨具卫具及日用杂品批发;风机、风扇销售;工程管理服务;货物进出口;技术进出口;技术服务、技术开发、技术咨询、技术交流、技术转让、技术推广;新兴能源技术研发;新材料技术研发;新材料技术推广服务;软件开发;软件销售;工业设计服务;机械电气设备制造;机械电气设备销售;气体、液体分离及纯净设备制造;气体、液体分离及纯净设备销售(除依法须经批准的项目外,凭营业执照依法自主开展经营活动)。",
+    "KEY_CLASSIF": "经营范围",
+    "KEY_CLASSIF_CODE": "002",
+    "IS_POINT": "0",
+    "MAINPOINT_NUM": "要点二",
+    "MAINPOINT_RANK": 2,
+    "IS_HISTORY": "0",
+    "SECURITY_CODE4": "600261"
+   },
+   {
+    "SECUCODE": "600261.SH",
+    "SECURITY_CODE": "600261",
+    "SECURITY_NAME_ABBR": "阳光照明",
+    "KEYWORD": "照明电器的研发、生产和销售",
+    "MAINPOINT": 3,
+    "MAINPOINT_CONTENT": "公司主要从事照明电器的研发、生产和销售，并为客户提供综合照明解决方案。主要产品涵盖LED照明产品、照明控制系统及电工器材等，广泛应用于商业、家居、办公、户外、轨道交通、工业及教育等通用照明领域，并覆盖应急照明以及空气开关、晾衣架、换气扇、浴霸等细分品类。",
+    "KEY_CLASSIF": "主营业务",
+    "KEY_CLASSIF_CODE": "003",
+    "IS_POINT": "0",
+    "MAINPOINT_NUM": "要点三",
+    "MAINPOINT_RANK": 3,
+    "IS_HISTORY": "0",
+    "SECURITY_CODE4": "600261"
+   }
+  ],
+  "msg": "ok"
+ },
+ "emweb_coreconception_600261": {
+  "status": 200,
+  "keys": [
+   "ssbk",
+   "hxtc"
+  ],
+  "ssbk": [
+   "家用电器",
+   "照明设备Ⅱ",
+   "照明设备Ⅲ",
+   "浙江板块",
+   "题材股",
+   "百日新高 ",
+   "近期新高",
+   "最近多板",
+   "东方财富热股",
+   "昨日连板_含一字",
+   "昨日涨停_含一字",
+   "标准普尔",
+   "富时罗素",
+   "融资融券",
+   "可控核聚变",
+   "商业航天",
+   "氢能源",
+   "贬值受益",
+   "长江三角",
+   "LED概念",
+   "参股券商",
+   "节能环保"
+  ]
+ },
+ "clist_29.p": {
+  "status": 200,
+  "txt": "{\"rc\":0,\"rt\":6,\"svr\":177542528,\"lt\":2,\"full\":1,\"dlmkts\":\"8,10,128\",\"dsc\":\"0\",\"data\":{\"total\":327,\"diff\":[{\"f12\":\"920961\",\"f14\":\"创远信科\"},{\"f12\":\"920943\",\"f14\":\"优机股份\"},{\"f12\":\"920914\",\"f14\":\"远航精密\"},{\"f12"
+ },
+ "clist_push": {
+  "status": 200,
+  "txt": "{\"rc\":0,\"rt\":6,\"svr\":177542531,\"lt\":2,\"full\":1,\"dlmkts\":\"8,10,128\",\"dsc\":\"0\",\"data\":{\"total\":327,\"diff\":[{\"f12\":\"920961\",\"f14\":\"创远信科\"},{\"f12\":\"920943\",\"f14\":\"优机股份\"},{\"f12\":\"920914\",\"f14\":\"远航精密\"},{\"f12"
+ },
+ "clist_82.p": {
+  "error": "ConnectionError(ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))"
+ },
+ "slist_600261": {
+  "status": 200,
+  "txt": "{\"rc\":0,\"rt\":18,\"svr\":181670096,\"lt\":2,\"full\":1,\"dlmkts\":\"8,10,128\",\"dsc\":\"0\",\"data\":{\"total\":23,\"diff\":{\"0\":{\"f12\":\"BK1630\",\"f14\":\"昨日首板\"},\"1\":{\"f12\":\"BK0815\",\"f14\":\"昨日涨停\"},\"2\":{\"f12\":\"BK1050\",\"f14\":\"昨日涨停_含一字\"},\"3\":{\"f12\":\"BK1674\",\"f14\":\"近期新高\"},\"4\":{\"f12\":\"BK0879\",\"f14\":\"标准普尔\"},\"5\":{\"f12\":\"BK0867\",\""
+ }
+}
