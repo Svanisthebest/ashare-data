@@ -40,14 +40,18 @@ def clist(fs, fields):
         pn += 1
     return rows
 
+import subprocess
+REPO = os.environ.get("GITHUB_REPOSITORY")
 def beat(**k):
     prog.update(k, utc=time.strftime("%H:%M:%S", time.gmtime())); json.dump(prog, open(f"{OUT}/progress.json", "w"), ensure_ascii=False)
+    if REPO:
+        subprocess.run(["gh", "release", "upload", "theme-data", f"{OUT}/progress.json", "--clobber", "-R", REPO], check=False, timeout=60)
 
 boards = []
 for typ, fs in [("概念", "m:90 t:3 f:!50"), ("行业", "m:90 t:2 f:!50")]:
     for r in clist(fs, "f12,f14,f3,f6,f104,f105"):
         boards.append(dict(type=typ, bk=r.get("f12"), name=r.get("f14"), pct=r.get("f3"), amount=r.get("f6"), up=r.get("f104"), down=r.get("f105")))
-B = pd.DataFrame(boards).drop_duplicates("bk"); B.to_csv(f"{OUT}/boards.csv", index=False)
+B = pd.DataFrame(boards).drop_duplicates("bk") if boards else pd.DataFrame(columns=["type","bk","name","pct","amount","up","down"]); B.to_csv(f"{OUT}/boards.csv", index=False)
 beat(boards=len(B))
 mem, kl = [], []
 for i, r in enumerate(B.itertuples()):

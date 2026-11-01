@@ -19,15 +19,19 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install requests pandas
-      - name: 拉取（每20个板块写一次进度并推送）
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          ( while sleep 120; do git add data/theme/progress.json 2>/dev/null && git commit -qm "theme progress" && git pull -q --rebase && git push -q; done ) &
-          python theme_pull.py
+      - name: 准备 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view theme-data -R ${{ github.repository }} || gh release create theme-data -R ${{ github.repository }} -t "题材板块数据进度" -n "theme_pull.py 心跳"
+      - name: 拉取（每20个板块上传一次心跳）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python theme_pull.py
       - name: 提交
         if: always()
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/theme || true
           git commit -m "theme data" || echo "无变化"
           git pull --rebase && git push
