@@ -1,0 +1,33 @@
+name: 题材板块数据
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "50 11 * * 1-5"   # 北京时间 19:50
+permissions:
+  contents: write
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            theme_pull.py
+            data/theme
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests pandas
+      - name: 拉取（每20个板块写一次进度并推送）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          ( while sleep 120; do git add data/theme/progress.json 2>/dev/null && git commit -qm "theme progress" && git pull -q --rebase && git push -q; done ) &
+          python theme_pull.py
+      - name: 提交
+        if: always()
+        run: |
+          git add data/theme || true
+          git commit -m "theme data" || echo "无变化"
+          git pull --rebase && git push
