@@ -92,7 +92,7 @@ def main():
         prev5 = hist[hist.date.isin(sorted(hist.date.unique())[-5:])].groupby("code").strong.sum()
         for k, grp in s.groupby("cl"):
             gid = order[k]
-            grp = grp.sort_values(["lb", "amount"], ascending=False)
+            grp = grp.assign(rs=grp.ret / np.where(grp.board == "主板", 0.1, 0.2)).sort_values(["lb", "zt", "rs", "amount"], ascending=False)   # 与研究一致
             lead = grp.index[0]
             zj = grp.drop(lead).amount.idxmax() if len(grp) > 1 else None
             for code, r in grp.iterrows():
@@ -113,7 +113,7 @@ def main():
                 cand = [x for x in cand if x in win.columns and ok.get(x, False)]
                 if cand:
                     corr = win[cand].apply(lambda col: col.corr(cm)).dropna()
-                    for code, cv in corr[corr >= FOLLOW_CORR].sort_values(ascending=False).head(8).items():
+                    for code, cv in corr[corr >= FOLLOW_CORR].sort_values(ascending=False).head(5).items():   # 与研究一致：每组最多 5 只
                         r = td.loc[code]
                         p = r.pos120
                         tag = "低位跟随" if pd.notna(p) and p < 0.33 else ("中位跟随" if pd.notna(p) and p < 0.66 else "高位跟随")
