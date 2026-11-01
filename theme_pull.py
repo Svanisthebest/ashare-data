@@ -17,20 +17,21 @@ LASTERR = {}
 def get(url, params, tries=3):
     for i in range(tries):
         try:
-            time.sleep(0.15 + random.random() * 0.15)
+            time.sleep(0.4 + random.random() * 0.4)
             r = S.get(url, params=params, timeout=15)
             if r.status_code == 200:
                 return r.json()
-            LASTERR[url[-25:]] = f"status {r.status_code} {r.text[:150]}"
+            LASTERR[url[:40]] = f"status {r.status_code}"
         except Exception as e:
-            LASTERR[url[-25:]] = repr(e)[:200]
+            LASTERR[url[:40]] = repr(e)[:120]
         time.sleep(1 + i)
     return None
 
 def clist(fs, fields):
     rows, pn = [], 1
     while True:
-        j = get("https://push2.eastmoney.com/api/qt/clist/get", {"pn": pn, "pz": 100, "po": 1, "np": 1, "ut": UT, "fltt": 2, "invt": 2,
+        host = random.choice(["https://push2.eastmoney.com", "https://29.push2.eastmoney.com", "https://82.push2.eastmoney.com", "https://7.push2.eastmoney.com", "https://17.push2.eastmoney.com"])
+        j = get(host + "/api/qt/clist/get", {"pn": pn, "pz": 100, "po": 1, "np": 1, "ut": UT, "fltt": 2, "invt": 2,
                                                                   "fid": "f3", "fs": fs, "fields": fields})
         if pn == 1 and "debug" not in prog:
             prog["debug"] = str(j)[:300]
