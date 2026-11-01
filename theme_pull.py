@@ -17,7 +17,7 @@ LASTERR = {}
 def get(url, params, tries=3):
     for i in range(tries):
         try:
-            time.sleep(0.4 + random.random() * 0.4)
+            time.sleep(0.3 + random.random() * 0.3)
             r = S.get(url, params=params, timeout=15)
             if r.status_code == 200:
                 return r.json()
@@ -30,7 +30,7 @@ def get(url, params, tries=3):
 def clist(fs, fields):
     rows, pn = [], 1
     while True:
-        host = random.choice(["https://push2.eastmoney.com", "https://29.push2.eastmoney.com", "https://82.push2.eastmoney.com", "https://7.push2.eastmoney.com", "https://17.push2.eastmoney.com"])
+        host = random.choice(["https://push2.eastmoney.com", "https://29.push2.eastmoney.com"])
         j = get(host + "/api/qt/clist/get", {"pn": pn, "pz": 100, "po": 1, "np": 1, "ut": UT, "fltt": 2, "invt": 2,
                                                                   "fid": "f3", "fs": fs, "fields": fields})
         if pn == 1 and "debug" not in prog:
@@ -56,21 +56,31 @@ for typ, fs in [("概念", "m:90 t:3 f:!50"), ("行业", "m:90 t:2 f:!50")]:
         boards.append(dict(type=typ, bk=r.get("f12"), name=r.get("f14"), pct=r.get("f3"), amount=r.get("f6"), up=r.get("f104"), down=r.get("f105")))
 B = pd.DataFrame(boards).drop_duplicates("bk") if boards else pd.DataFrame(columns=["type","bk","name","pct","amount","up","down"]); B.to_csv(f"{OUT}/boards.csv", index=False)
 beat(boards=len(B))
-mem, kl = [], []
+# 成分股：数据中心「核心题材」报表（全部股票-题材对应，含入选理由）
+mem = []
+pg, pages = 1, 1
+while pg <= pages:
+    j = get("https://datacenter-web.eastmoney.com/api/data/v1/get", {"reportName": "RPT_F10_CORETHEME_BOARDTYPE", "columns": "SECURITY_CODE,SECURITY_NAME_ABBR,NEW_BOARD_CODE,BOARD_NAME,IS_PRECISE,BOARD_RANK,SELECTED_BOARD_REASON",
+        "pageNumber": pg, "pageSize": 500, "sortColumns": "SECURITY_CODE", "sortTypes": "1", "source": "WEB", "client": "WEB"})
+    res = (j or {}).get("result") or {}
+    pages = res.get("pages") or pages
+    for x in res.get("data") or []:
+        mem.append((x.get("NEW_BOARD_CODE"), x.get("SECURITY_CODE"), x.get("SECURITY_NAME_ABBR"), x.get("BOARD_NAME"), x.get("IS_PRECISE"), x.get("BOARD_RANK"), (x.get("SELECTED_BOARD_REASON") or "").replace("\n", " ")[:300]))
+    if pg % 20 == 0:
+        beat(member_pages=pg, member_pages_total=pages, members=len(mem))
+    pg += 1
+pd.DataFrame(mem, columns=["bk", "code", "name", "board_name", "precise", "rank", "reason"]).to_csv(f"{OUT}/members.csv.gz", index=False)
+beat(members=len(mem), member_pages=pages)
+kl = []
 for i, r in enumerate(B.itertuples()):
-    for m in clist(f"b:{r.bk} f:!50", "f12,f14"):
-        mem.append((r.bk, m.get("f12"), m.get("f14")))
     j = get("https://push2his.eastmoney.com/api/qt/stock/kline/get", {"secid": f"90.{r.bk}", "klt": 101, "fqt": 0, "lmt": 260, "end": "20500101",
                                                                       "ut": UT, "fields1": "f1,f2,f3", "fields2": "f51,f52,f53,f54,f55,f56,f57,f59"})
     for line in ((j or {}).get("data") or {}).get("klines") or []:
         p = line.split(","); kl.append((r.bk, p[0], p[1], p[2], p[3], p[4], p[6], p[7]))
-    if i < 3:
-        prog[f"dbg_member_{i}"] = len(mem); prog[f"dbg_err_{i}"] = dict(LASTERR); prog[f"dbg_kline_{i}"] = str(j)[:200]
-    if i % 20 == 0 or i < 3:
-        beat(done=i + 1, total=len(B), members=len(mem), klines=len(kl))
+    if i % 40 == 0:
+        beat(kline_done=i + 1, total=len(B), klines=len(kl), err=dict(LASTERR))
     if os.environ.get("LIMIT") and i + 1 >= int(os.environ["LIMIT"]):
         break
-pd.DataFrame(mem, columns=["bk", "code", "name"]).to_csv(f"{OUT}/members.csv", index=False)
 pd.DataFrame(kl, columns=["bk", "date", "open", "close", "high", "low", "amount", "pct"]).to_csv(f"{OUT}/board_kline.csv.gz", index=False)
-beat(done=len(B), total=len(B), members=len(mem), klines=len(kl), final=True)
+beat(kline_done=len(B), total=len(B), members=len(mem), klines=len(kl), final=True)
 print("boards", len(B), "members", len(mem), "klines", len(kl))
