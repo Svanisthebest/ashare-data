@@ -60,6 +60,12 @@ jobs:
             python daily_pull.py --date ${{ steps.d.outputs.date }} --backfill ${{ steps.d.outputs.backfill }} --out data
           fi
 
+      - name: 生成 v1 次日计划
+        if: success()
+        run: |
+          D=$(ls data/daily | tail -1 | cut -c1-8)
+          python clusters_daily.py --date $D --out data && python v1_plan.py --date $D --out data || echo "计划生成失败"
+
       - name: 提交到仓库
         if: always()
         run: |
