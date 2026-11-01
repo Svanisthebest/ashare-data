@@ -60,7 +60,7 @@ def main():
     if os.path.exists(cf):
         cl = pd.read_csv(cf, dtype={'代码': str}); sm = pd.read_csv(sf).set_index('组')
         for _, r in cl[(cl['角色'] == '龙头') & (cl['连板'] == 2)].iterrows():
-            if r['代码'] in td.index: add('L', r['代码'], f"组{r['组']}（{int(sm.loc[r['组'],'规模'])}只）开盘<+2%才买，即 < {td.loc[r['代码'],'close']*1.02:.2f}", -sm.loc[r['组'], '规模'])
+            if r['代码'] in td.index and sm.loc[r['组'], '规模'] >= 3:   # 与回测一致：组至少 3 只 add('L', r['代码'], f"组{r['组']}（{int(sm.loc[r['组'],'规模'])}只）开盘<+2%才买，即 < {td.loc[r['代码'],'close']*1.02:.2f}", -sm.loc[r['组'], '规模'])
         if red >= 0.30:
             lf = cl[cl['角色'] == '低位跟随'].sort_values('与组相关', ascending=False).drop_duplicates('代码')
             for _, r in lf.iterrows():
