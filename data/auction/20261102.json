@@ -1,0 +1,152 @@
+{
+ "来源": "东方财富",
+ "抓取时间北京": "10:00:49",
+ "股票数": 5562,
+ "已开盘": 5217,
+ "不含ST": {
+  "上涨": 3035,
+  "下跌": 1354,
+  "平盘": 637,
+  "红盘率": 0.6039
+ },
+ "含ST": {
+  "上涨": 3106,
+  "下跌": 1435,
+  "平盘": 676,
+  "红盘率": 0.5954
+ },
+ "候选": [
+  {
+   "code": "688765",
+   "name": "禾元生物-U",
+   "last_close": 30.35,
+   "open": 30.51,
+   "price": 29.76,
+   "high": 30.9,
+   "low": 29.65,
+   "开盘涨跌%": 0.53,
+   "现价涨跌%": -1.94,
+   "现价较开盘%": -2.46
+  },
+  {
+   "code": "688411",
+   "name": "海博思创",
+   "last_close": 136.58,
+   "open": 137.08,
+   "price": 135.46,
+   "high": 140.86,
+   "low": 133.7,
+   "开盘涨跌%": 0.37,
+   "现价涨跌%": -0.82,
+   "现价较开盘%": -1.18
+  },
+  {
+   "code": "688347",
+   "name": "华虹宏力",
+   "last_close": 132.0,
+   "open": 134.37,
+   "price": 136.81,
+   "high": 139.51,
+   "low": 131.01,
+   "开盘涨跌%": 1.8,
+   "现价涨跌%": 3.64,
+   "现价较开盘%": 1.82
+  },
+  {
+   "code": "600105",
+   "name": "永鼎股份",
+   "last_close": 21.75,
+   "open": 22.18,
+   "price": 21.81,
+   "high": 22.44,
+   "low": 21.6,
+   "开盘涨跌%": 1.98,
+   "现价涨跌%": 0.28,
+   "现价较开盘%": -1.67
+  },
+  {
+   "code": "301071",
+   "name": "力量钻石",
+   "last_close": 50.59,
+   "open": 51.06,
+   "price": 51.83,
+   "high": 52.95,
+   "low": 50.2,
+   "开盘涨跌%": 0.93,
+   "现价涨跌%": 2.45,
+   "现价较开盘%": 1.51
+  },
+  {
+   "code": "300418",
+   "name": "昆仑万维",
+   "last_close": 33.25,
+   "open": 33.51,
+   "price": 33.63,
+   "high": 34.1,
+   "low": 32.9,
+   "开盘涨跌%": 0.78,
+   "现价涨跌%": 1.14,
+   "现价较开盘%": 0.36
+  },
+  {
+   "code": "300286",
+   "name": "安科瑞",
+   "last_close": 17.82,
+   "open": 17.83,
+   "price": 18.17,
+   "high": 18.22,
+   "low": 17.61,
+   "开盘涨跌%": 0.06,
+   "现价涨跌%": 1.96,
+   "现价较开盘%": 1.91
+  },
+  {
+   "code": "002384",
+   "name": "东山精密",
+   "last_close": 86.06,
+   "open": 91.0,
+   "price": 90.3,
+   "high": 93.98,
+   "low": 89.1,
+   "开盘涨跌%": 5.74,
+   "现价涨跌%": 4.93,
+   "现价较开盘%": -0.77
+  },
+  {
+   "code": "001219",
+   "name": "青岛食品",
+   "last_close": 19.94,
+   "open": 20.6,
+   "price": 21.93,
+   "high": 21.93,
+   "low": 19.2,
+   "开盘涨跌%": 3.31,
+   "现价涨跌%": 9.98,
+   "现价较开盘%": 6.46
+  },
+  {
+   "code": "000938",
+   "name": "紫光股份",
+   "last_close": 23.03,
+   "open": 23.48,
+   "price": 22.91,
+   "high": 23.5,
+   "low": 22.81,
+   "开盘涨跌%": 1.95,
+   "现价涨跌%": -0.52,
+   "现价较开盘%": -2.43
+  }
+ ],
+ "日志": [
+  "em p37 https://82.push2.eastmoney.com Expecting value: line 1 column 1 (char 0)",
+  "em p37 https://72.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p44 https://72.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p44 https://7.push2.eastmoney.com/ ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p44 https://28.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p49 https://82.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p49 https://72.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p49 https://7.push2.eastmoney.com/ ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p57 https://7.push2.eastmoney.com/ ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+  "em p57 https://28.push2.eastmoney.com ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+ ]
+}
