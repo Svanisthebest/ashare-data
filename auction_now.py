@@ -7,20 +7,21 @@ os.makedirs('data/auction', exist_ok=True)
 day = f"{dt.datetime.utcnow() + dt.timedelta(hours=8):%Y%m%d}"
 ERR = f'data/auction/{day}_err.txt'; log = []
 def em():
-    rows = []; url = 'https://push2.eastmoney.com/api/qt/clist/get'
+    rows = []; hosts = ['push2', '82.push2', '72.push2', '7.push2', '28.push2', '17.push2']
     for pn in range(1, 80):
         p = dict(pn=pn, pz=100, po=1, np=1, fltt=2, invt=2, fid='f12', fs='m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048',
                  fields='f12,f14,f17,f18,f2,f15,f16', ut='bd1d9ddb04089700cf9c27f6f7426281')
-        for t in range(3):
+        for t in range(6):
+            url = f'https://{hosts[(pn + t) % len(hosts)]}.eastmoney.com/api/qt/clist/get'
             try:
                 j = requests.get(url, params=p, timeout=15, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com/'}).json(); break
             except Exception as e:
-                log.append(f'em p{pn} {e}'); time.sleep(1); j = None
+                log.append(f'em p{pn} {url[:30]} {e}'); time.sleep(3 + 2 * t); j = None
         d = (j or {}).get('data') or {}
         diff = d.get('diff') or []
         if isinstance(diff, dict): diff = list(diff.values())
         if not diff: break
-        rows += diff
+        rows += diff; time.sleep(2)
         if len(rows) >= d.get('total', 0): break
     Q = pd.DataFrame(rows).rename(columns={'f12': 'code', 'f14': 'name', 'f17': 'open', 'f18': 'last_close', 'f2': 'price', 'f15': 'high', 'f16': 'low'})
     for c in ['open', 'last_close', 'price', 'high', 'low']: Q[c] = pd.to_numeric(Q[c], errors='coerce')
