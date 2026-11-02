@@ -32,6 +32,8 @@ try:
               q = c.quotes(symbol=codes[i:i + 80]); rows.append(q); break
           except Exception as e:
               time.sleep(1)
+  dbg = [repr(type(r)) + ' ' + (str(r.shape) + ' ' + str(list(r.columns)) if hasattr(r, 'columns') else repr(r)[:300]) for r in rows[:3]]
+  open(ERR.replace('_err', '_dbg'), 'w').write(str(len(rows)) + '\n' + '\n'.join(dbg) + '\n' + (repr(rows[0].head(3)) if rows and hasattr(rows[0], 'head') else ''))
   Q = pd.concat(rows, ignore_index=True)
   Q['code'] = Q['code'].astype(str).str.zfill(6)
   Q = Q[(Q.last_close > 0)]
