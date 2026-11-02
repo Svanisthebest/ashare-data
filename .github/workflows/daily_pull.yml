@@ -65,7 +65,7 @@ jobs:
         run: |
           D=$(ls data/daily | tail -1 | cut -c1-8)
           python clusters_daily.py --date $D --out data && python v1_plan.py --date $D --out data || echo "计划生成失败"
-          python sim_book.py --date $D --out data && cat data/sim/$D.md >> data/plan/$D.md || echo "模拟盘未更新"
+          python sim_book.py --date $D --out data && { echo; echo; cat data/sim/$D.md; } >> data/plan/$D.md || echo "模拟盘未更新"
 
       - name: 提交到仓库
         if: always()
