@@ -1,0 +1,7 @@
+66
+<class 'pandas.DataFrame'> (0, 0) []
+<class 'pandas.DataFrame'> (0, 0) []
+<class 'pandas.DataFrame'> (0, 0) []
+Empty DataFrame
+Columns: []
+Index: []
