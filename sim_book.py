@@ -62,7 +62,7 @@ def main():
             val = min(W.get(s, 0.20) * eq_open, book['cash'])
             if val <= 0.01 * eq_open: break
             book['cash'] -= val
-            book['pos'].append(dict(code=c, name=r['名称'], src=s, entry=D, ep=o, val=val, last=o, peak=o, held=0, extra=0))
+            book['pos'].append(dict(code=c, name=r['名称'], src=s, entry=D, ep=o, val=val, cost=val, last=o, peak=o, held=0, extra=0))
             held.add(c); buys.append((NAME[s], c, r['名称'], o, val))
     # ---------- 收盘卖出 ----------
     sells, keep = [], []
@@ -82,7 +82,8 @@ def main():
                 if p['src'] == 'LD' and dr >= 0.7 * L and p['extra'] < 3: p['extra'] += 1
                 else: why = '没涨停，尾盘卖'
         if why:
-            r_ = cl / p['ep'] - 1 - 0.003; book['cash'] += p['val'] * (1 + r_)
+            cost = p.get('cost', p['val'] * p['ep'] / p['last'])   # 买入时投入的金额
+            r_ = cl / p['ep'] - 1 - 0.003; book['cash'] += cost * (1 + r_)   # 按买入金额 × 买入以来收益结算，不能用已逐日更新的市值再乘一次
             sells.append((NAME[p['src']], c, p['name'], p['ep'], cl, r_, why))
         else:
             p['val'] = p['val'] * cl / p['last']; p['last'] = cl; keep.append(p)
