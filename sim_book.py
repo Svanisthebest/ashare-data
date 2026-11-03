@@ -82,7 +82,7 @@ def main():
                 if p['src'] == 'LD' and dr >= 0.7 * L and p['extra'] < 3: p['extra'] += 1
                 else: why = '没涨停，尾盘卖'
         if why:
-            r_ = cl / p['ep'] - 1 - 0.003; book['cash'] += p['val'] * (1 + r_)
+            r_ = cl / p['ep'] - 1 - 0.003; book['cash'] += p['val'] * p['ep'] / p['last'] * (1 + r_)   # val 已按上一收盘估值，先还原成买入金额再乘全程收益，避免重复计算
             sells.append((NAME[p['src']], c, p['name'], p['ep'], cl, r_, why))
         else:
             p['val'] = p['val'] * cl / p['last']; p['last'] = cl; keep.append(p)
