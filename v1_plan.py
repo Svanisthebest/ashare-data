@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-v1 短线系统：收盘后生成次日候选清单（不看未来数据）。
+v1.1 短线系统：收盘后生成次日候选清单（不看未来数据）。
+v1.1 相对 v1：总龙头首阴要求昨日最高板 ≥ 4；强势回调要求昨日涨停股今日溢价 > 0；去掉试验仓；总龙头首阴、低位启动每笔 25%。
 先运行 clusters_daily.py 生成当天联动分组，再运行本脚本：
     python clusters_daily.py --date 20261030 --out data
     python v1_plan.py --date 20261030 --out data
@@ -37,9 +38,9 @@ def _load(root, date, n_days):
     return df
 
 NAME = {'B': '恐慌低吸', 'RB': '跌深反弹', 'L': '2板龙头', 'LD': '总龙头强势首阴', 'C': '强势回调',
-        'D': '低位启动', 'A': '低位跟随', 'M': '周一放宽', 'T': '试验仓'}
+        'D': '低位启动', 'A': '低位跟随', 'M': '周一放宽'}
 CAP = {'RB': 2, 'C': 3, 'D': 3}
-SIZE = {'B': 20, 'RB': 10, 'L': 20, 'LD': 20, 'C': 20, 'D': 20, 'A': 20, 'M': 20, 'T': 10}
+SIZE = {'B': 20, 'RB': 10, 'L': 20, 'LD': 25, 'C': 20, 'D': 25, 'A': 20, 'M': 20}
 
 
 def index_state(root, date):
@@ -75,7 +76,12 @@ def main():
     td['pos120'] = ((td.adj - lo.reindex(td.index)) / (hi - lo).reindex(td.index)).clip(0, 1)
     red = (td.ret > 0).mean(); nzt = int(td.zt.sum())
     ndt = int(td.dt[~td.name.astype(str).str.contains('退')].sum())   # 不含 ST，与研究里 200 家门槛的口径一致
-    maxlb = int(td.lb[td.zt].max()); maxlb = int(td.lb[td.zt].max())
+    maxlb = int(td.lb[td.zt].max())
+    # 昨日涨停股今日溢价（不含 ST、今日一字板），v1.1 强势回调的情绪过滤
+    tdall = df[(df.date == d) & ~df.st].set_index('code')
+    yz = tdall.zt & (tdall.high == tdall.low)
+    zy = tdall[tdall.index.isin(pv[pv.zt].index) & ~yz]
+    prem = float(zy.ret.mean()) if len(zy) else 0.0
     fh, above5, zr = index_state(a.out, D)
     nxt = '下一交易日'; monday = pd.Timestamp(d).weekday() == 4   # 周一放宽：信号日为周五
     C = []
@@ -101,18 +107,17 @@ def main():
             lf = cl[cl['角色'] == '低位跟随'].sort_values('与组相关', ascending=False).drop_duplicates('代码')
             for _, r in lf.iterrows():
                 if r['代码'] in td.index: add('A', r['代码'], '9:40 再定：前10分钟成交量 ≥ 昨日全天的 18%，且价格在开盘价上方', -r['与组相关'])
-    # 总龙头强势首阴：前一天全市场最高板（≥3板），今天没涨停但收涨 > 3%
+    # 总龙头强势首阴：前一天全市场最高板（v1.1：≥4板），今天没涨停但收涨 > 3%
     pmax = pv.lb[pv.zt].max() if pv.zt.any() else 0
-    if pmax >= 3:
+    if pmax >= 4:
         for code in pv[(pv.zt) & (pv.lb == pmax)].index:
             if code in td.index and not td.loc[code, 'zt'] and td.loc[code, 'ret'] > 0.03: add('LD', code, f'昨日 {int(pmax)} 板，今日断板收涨', 0)
-    # 强势回调（以及周一放宽、试验仓用同一批）
+    # 强势回调（以及周一放宽用同一批）；v1.1：强势回调要求昨日涨停溢价 > 0，周一放宽不受此限
     cc = td[(td.n >= 60) & (td.zt5 >= 2) & (~td.zt) & (td.adj < td.hi5 * 0.92) & (td.adj > td.ma10)]   # 与回测一致：不要求当天收跌
     if above5:
         for code, r in cc.iterrows():
-            add('C', code, '9:25 按竞价额/昨日成交额从大到小买', 0)
+            if prem > 0: add('C', code, '9:25 按竞价额/昨日成交额从大到小买', 0)
             if monday: add('M', code, '周一竞价 40–55% 时做', 0)
-            add('T', code, '竞价 40–55%：竞价额 ≥ 昨日成交额 1.5% 且不低开', 0)
     # 低位启动
     for i, (code, r) in enumerate(td[td.ret.between(0.05, 0.095) & (td.pos120 < 0.10)].sort_values('pos120').iterrows()):
         add('D', code, '首选' if i < 3 else '备选', i)
@@ -120,16 +125,16 @@ def main():
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
     # 写计划
-    L = [f'# v1 计划：{d} 收盘 → {nxt}', '',
+    L = [f'# v1.1 计划：{d} 收盘 → {nxt}', '',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
-         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；跌深反弹{"已触发" if fh < -0.10 else "未触发"}（距高点 < −10%）；强势回调{"可做" if above5 else "暂停（中证1000 在 5 日线下）"}；{"今天是周五，下一交易日适用周一放宽" if monday else ""}', '',
+         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；跌深反弹{"已触发" if fh < -0.10 else "未触发"}（距高点 < −10%）；昨日涨停溢价 {prem:+.2%}，强势回调{("可做" if prem > 0 else "暂停（昨日涨停溢价 ≤ 0）") if above5 else "暂停（中证1000 在 5 日线下）"}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；{"今天是周五，下一交易日适用周一放宽" if monday else ""}', '',
          '## 9:25 竞价决定动作', '',
          '| 全A竞价红盘率 | 可做的路线 |', '|---|---|',
          '| > 55% | 全部：恐慌低吸 → 跌深反弹 → 2板龙头 → 总龙头首阴 → 强势回调 → 低位启动 → 低位跟随 |',
-         '| 40–55% | 跌深反弹、周一放宽（仅周一）、试验仓；总龙头首阴照做 |',
+         '| 40–55% | 跌深反弹、周一放宽（仅周一）；总龙头首阴照做 |',
          '| < 40% | 不开新仓；总龙头首阴照做 |', '',
          '最多同时 5 只（含已有持仓）；跌深反弹最多 2 只，强势回调、低位启动各最多 3 只。一字涨停或停牌跳过，用同路线下一只补；同一只股票只买一次（已持有或已在前面路线买过的跳过）。', '竞价红盘率口径：沪深 A 股（不含北交所），9:25 竞价价高于昨收的家数 ÷ 全部，平盘不算红。', '']
-    for src in ['B', 'RB', 'L', 'LD', 'C', 'D', 'A', 'M', 'T']:
+    for src in ['B', 'RB', 'L', 'LD', 'C', 'D', 'A', 'M']:
         x = P[P.src == src].sort_values('rk') if len(P) else P
         L.append(f'## {NAME[src]}（每笔 {SIZE[src]}%{"，最多 " + str(CAP[src]) + " 只" if src in CAP else ""}）')
         if not len(x): L += ['', '无候选。', '']; continue
@@ -138,7 +143,10 @@ def main():
         L.append('')
     L += ['## 卖出', '', '- 跌深反弹拿 5 天（买入当天算第 1 天）收盘卖；恐慌低吸从高点回撤 10% 卖；两者收盘亏 15% 止损。',
           '- 其他路线：买入后第一个可卖日起，不涨停就尾盘卖；总龙头首阴当天涨 ≥ 7%（20cm ≥ 14%）也可多拿，最多 3 天；收盘亏 8% 止损。',
-          '- 14:50 前挂尾盘卖单；封死跌停卖不出就次日开盘卖；不用盘中止损单。']
+          '- v1.1：到了该卖的那天，14:50 若持仓亏损且中证1000 当天跌 ≥ 1%，推迟一天再卖（只推迟一次；收盘亏 8% 仍止损）。',
+          '- 14:50 前挂尾盘卖单；封死跌停卖不出就次日开盘卖；不用盘中止损单。', '',
+          '## 执行', '', '- 9:25 竞价确认后开盘买（低位跟随 9:40 确认）；资金大时 9:30–10:00 分几次买，单只不超过该股昨日成交额的 4%。',
+          '- 空闲资金放国债逆回购或货币 ETF，要用时开盘先卖。']
     open(os.path.join(a.out, 'plan', f'{D}.md'), 'w').write('\n'.join(L))
     print('\n'.join(L))
 
