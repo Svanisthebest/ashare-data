@@ -48,6 +48,7 @@ jobs:
             tick_pull.py
             tick_targets.csv
             tick_targets_zt.csv
+            tick_targets_exit.csv
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
