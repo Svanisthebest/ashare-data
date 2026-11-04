@@ -40,7 +40,7 @@ def ckpt(rows, code):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shard", type=int, default=0); ap.add_argument("--nshards", type=int, default=1)
-    ap.add_argument("--start", default="2022-01-01")
+    ap.add_argument("--start", default="2023-01-01")
     ap.add_argument("--end", default=pd.Timestamp.now(tz="Asia/Shanghai").strftime("%Y-%m-%d"))
     ap.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()

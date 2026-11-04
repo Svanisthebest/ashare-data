@@ -5,7 +5,7 @@ on:
     inputs:
       nshards:
         description: "分片数"
-        default: "20"
+        default: "16"
       limit:
         description: "每片只拉前N只（0=全部）"
         default: "0"
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
-      max-parallel: 20
+      max-parallel: 16
       matrix:
         shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:
