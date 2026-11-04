@@ -1,0 +1,136 @@
+{
+ "buy_2022-01-01": {
+  "pages": 42,
+  "rows": 20803
+ },
+ "buy_2022-04-01": {
+  "pages": 52,
+  "rows": 46436
+ },
+ "buy_2022-07-01": {
+  "pages": 42,
+  "rows": 67074
+ },
+ "buy_2022-10-01": {
+  "pages": 36,
+  "rows": 85012
+ },
+ "buy_2023-01-01": {
+  "pages": 30,
+  "rows": 99534
+ },
+ "buy_2023-04-01": {
+  "pages": 44,
+  "rows": 121289
+ },
+ "buy_2023-07-01": {
+  "pages": 38,
+  "rows": 140224
+ },
+ "buy_2023-10-01": {
+  "pages": 43,
+  "rows": 161282
+ },
+ "buy_2024-01-01": {
+  "pages": 54,
+  "rows": 187959
+ },
+ "buy_2024-04-01": {
+  "pages": 51,
+  "rows": 212977
+ },
+ "buy_2024-07-01": {
+  "pages": 44,
+  "rows": 234507
+ },
+ "buy_2024-10-01": {
+  "pages": 69,
+  "rows": 268656
+ },
+ "buy_2025-01-01": {
+  "pages": 48,
+  "rows": 292179
+ },
+ "buy_2025-04-01": {
+  "pages": 51,
+  "rows": 317390
+ },
+ "buy_2025-07-01": {
+  "pages": 52,
+  "rows": 343200
+ },
+ "buy_2025-10-01": {
+  "pages": 47,
+  "rows": 366288
+ },
+ "buy_2026-01-01": {
+  "pages": 46,
+  "rows": 389198
+ },
+ "buy_2026-04-01": {
+  "pages": 57,
+  "rows": 417251
+ },
+ "buy_2026-07-01": {
+  "pages": 55,
+  "rows": 444365
+ },
+ "buy_2026-10-01": {
+  "pages": 17,
+  "rows": 452420
+ },
+ "buy_cols": [
+  "SECURITY_CODE",
+  "SECUCODE",
+  "TRADE_DATE",
+  "OPERATEDEPT_CODE",
+  "OPERATEDEPT_NAME",
+  "EXPLANATION",
+  "CHANGE_RATE",
+  "CLOSE_PRICE",
+  "ACCUM_AMOUNT",
+  "ACCUM_VOLUME",
+  "BUY",
+  "SELL",
+  "NET",
+  "RISE_PROBABILITY_3DAY",
+  "TOTAL_BUYER_SALESTIMES_3DAY",
+  "CHANGE_TYPE",
+  "OPERATEDEPT_CODE_OLD",
+  "TOTAL_BUYRIO",
+  "TOTAL_SELLRIO",
+  "TRADE_ID"
+ ],
+ "sell_2022-01-01": {
+  "pages": 42,
+  "rows": 20875
+ },
+ "sell_2022-04-01": {
+  "pages": 52,
+  "rows": 46476
+ },
+ "sell_2022-07-01": {
+  "pages": 42,
+  "rows": 67166
+ },
+ "sell_2022-10-01": {
+  "pages": 36,
+  "rows": 85122
+ },
+ "sell_2023-01-01": {
+  "pages": 30,
+  "rows": 99707
+ },
+ "sell_2023-04-01": {
+  "pages": 44,
+  "rows": 121438
+ },
+ "sell_2023-07-01": {
+  "pages": 38,
+  "rows": 140369
+ },
+ "sell_2023-10-01": {
+  "pages": 43,
+  "rows": 161433
+ }
+}
