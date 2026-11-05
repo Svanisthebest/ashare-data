@@ -46,7 +46,7 @@ def main():
     plan_f = os.path.join(root, 'plan', f'{P}.csv')
     cand = pd.read_csv(plan_f, dtype={'代码': str}) if os.path.exists(plan_f) else pd.DataFrame(columns=['src', '代码', '名称'])
     friday = pd.Timestamp(P).weekday() == 4
-    allowed = (set(ORDER) - {'K'}) if red > 0.55 else ({'RB', 'LD', 'K'} | ({'M'} if friday else set())) if red >= 0.40 else {'LD', 'K'}
+    allowed = (set(ORDER) - {'K', 'M'}) if red > 0.55 else ({'B', 'RB', 'LD', 'K'} | ({'M'} if friday else set())) if red >= 0.40 else {'B', 'LD', 'K'}   # 与回测一致：恐慌低吸不看竞价；周一放宽只在 40–55%
     zf = os.path.join(root, 'index', f'{D}.csv')
     zr = float(pd.read_csv(zf).set_index('指数').loc['中证1000', '涨跌幅']) / 100 if os.path.exists(zf) else 0.0   # 中证1000 当天涨跌
     buys, skips = [], []
@@ -105,7 +105,7 @@ def main():
     rows = [dict(日期=D, 动作='买入', 路线=b[0], 代码=b[1], 名称=b[2], 价格=round(b[3], 2), 仓位=round(b[4], 4)) for b in buys] + \
            [dict(日期=D, 动作='卖出', 路线=s_[0], 代码=s_[1], 名称=s_[2], 价格=round(s_[4], 2), 收益=round(s_[5], 4), 原因=s_[6]) for s_ in sells]
     if rows: pd.DataFrame(rows).to_csv(tf, mode='a', header=not os.path.exists(tf), index=False, encoding='utf-8-sig')
-    gate = '> 55%，正常开仓' if red > 0.55 else ('40–55%，只做跌深反弹 / 周一放宽 / 总龙头首阴 / 高标被砸' if red >= 0.40 else '< 40%，只做总龙头首阴 / 高标被砸')
+    gate = '> 55%，正常开仓' if red > 0.55 else ('40–55%，只做恐慌低吸 / 跌深反弹 / 周一放宽 / 总龙头首阴 / 高标被砸' if red >= 0.40 else '< 40%，只做恐慌低吸 / 总龙头首阴 / 高标被砸')
     L_ = [f'## 模拟盘（{D}）', '', f'- 今天 9:25 全A竞价红盘率 **{red:.1%}**（{gate}）；按 {P} 收盘的候选执行。',
           f'- 账户净值 **{eq:.4f}**（2026-11-02 起始 1.0000），现金 {book["cash"] / eq:.0%}，持仓 {len(book["pos"])} 只。', '']
     L_ += ['**今天开盘买入**', ''] + ([f'- {b[0]}：{b[2]}（{b[1]}）开盘价 {b[3]:.2f}，仓位 {b[4] / eq_open:.0%}' for b in buys] or ['- 无']) + ['']
