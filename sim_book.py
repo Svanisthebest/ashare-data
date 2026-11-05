@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-v1.1 模拟账本：按前一交易日的候选清单（data/plan/上一日.csv）和当天行情，模拟当天 9:25 竞价决策、开盘买入、收盘卖出。
+v1.2 模拟账本：按前一交易日的候选清单（data/plan/上一日.csv）和当天行情，模拟当天 9:25 竞价决策、开盘买入、收盘卖出。
     python sim_book.py --date 20261102 --out data
 状态：data/sim/book.json（现金、持仓），流水：data/sim/trades.csv，当日报告：data/sim/YYYYMMDD.md
 不能用日线数据模拟的条件：低位跟随（要 9:40 成交量），模拟盘不做，报告里注明。
+v1.2：新增高标被砸（竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间才买，10%，最多 2 只）。
 v1.1：去掉试验仓；总龙头首阴、低位启动每笔 25%；该卖那天若亏损且中证1000 跌 ≥ 1%，推迟一天卖（只推迟一次）。
 """
 import argparse, glob, json, os
 import numpy as np, pandas as pd
 
-START = '20261102'; CAP = {'RB': 2, 'C': 3, 'D': 3}; W = {'RB': 0.10, 'LD': 0.25, 'D': 0.25}
-ORDER = ['B', 'RB', 'L', 'LD', 'C', 'D', 'A', 'M']
-NAME = {'B': '恐慌低吸', 'RB': '跌深反弹', 'L': '2板龙头', 'LD': '总龙头强势首阴', 'C': '强势回调', 'D': '低位启动', 'A': '低位跟随', 'M': '周一放宽', 'T': '试验仓（v1 已停用）'}
+START = '20261102'; CAP = {'RB': 2, 'C': 3, 'D': 3, 'K': 2}; W = {'RB': 0.10, 'LD': 0.25, 'D': 0.25, 'K': 0.10}
+ORDER = ['B', 'RB', 'L', 'LD', 'K', 'C', 'D', 'A', 'M']
+NAME = {'B': '恐慌低吸', 'RB': '跌深反弹', 'L': '2板龙头', 'LD': '总龙头强势首阴', 'C': '强势回调', 'D': '低位启动', 'A': '低位跟随', 'M': '周一放宽', 'K': '高标被砸', 'T': '试验仓（v1 已停用）'}
 
 
 def day_file(root, d): return os.path.join(root, 'daily', f'{d}.csv.gz')
@@ -45,7 +46,7 @@ def main():
     plan_f = os.path.join(root, 'plan', f'{P}.csv')
     cand = pd.read_csv(plan_f, dtype={'代码': str}) if os.path.exists(plan_f) else pd.DataFrame(columns=['src', '代码', '名称'])
     friday = pd.Timestamp(P).weekday() == 4
-    allowed = set(ORDER) if red > 0.55 else ({'RB', 'LD'} | ({'M'} if friday else set())) if red >= 0.40 else {'LD'}
+    allowed = (set(ORDER) - {'K'}) if red > 0.55 else ({'RB', 'LD', 'K'} | ({'M'} if friday else set())) if red >= 0.40 else {'LD', 'K'}
     zf = os.path.join(root, 'index', f'{D}.csv')
     zr = float(pd.read_csv(zf).set_index('指数').loc['中证1000', '涨跌幅']) / 100 if os.path.exists(zf) else 0.0   # 中证1000 当天涨跌
     buys, skips = [], []
@@ -62,6 +63,9 @@ def main():
             if o is None: skips.append(f"{NAME[s]} {r['名称']}：停牌"); continue
             if t.loc[c, 'high'] == t.loc[c, 'low'] and o >= t.loc[c, 'up'] - 0.005: skips.append(f"{NAME[s]} {r['名称']}：一字涨停买不到"); continue
             if s == 'L' and o >= t.loc[c, 'prev_close'] * 1.02: skips.append(f"{NAME[s]} {r['名称']}：高开 {o / t.loc[c, 'prev_close'] - 1:+.1%}，超过 2% 放弃"); continue
+            if s == 'K':
+                pc_ = t.loc[c, 'prev_close']
+                if not (pc_ * 0.97 <= o < pc_): skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，不在 −3% 到 0 之间"); continue
             val = min(W.get(s, 0.20) * eq_open, book['cash'])
             if val <= 0.01 * eq_open: break
             book['cash'] -= val
@@ -100,7 +104,7 @@ def main():
     rows = [dict(日期=D, 动作='买入', 路线=b[0], 代码=b[1], 名称=b[2], 价格=round(b[3], 2), 仓位=round(b[4], 4)) for b in buys] + \
            [dict(日期=D, 动作='卖出', 路线=s_[0], 代码=s_[1], 名称=s_[2], 价格=round(s_[4], 2), 收益=round(s_[5], 4), 原因=s_[6]) for s_ in sells]
     if rows: pd.DataFrame(rows).to_csv(tf, mode='a', header=not os.path.exists(tf), index=False, encoding='utf-8-sig')
-    gate = '> 55%，正常开仓' if red > 0.55 else ('40–55%，只做跌深反弹 / 周一放宽' if red >= 0.40 else '< 40%，不开新仓')
+    gate = '> 55%，正常开仓' if red > 0.55 else ('40–55%，只做跌深反弹 / 周一放宽 / 总龙头首阴 / 高标被砸' if red >= 0.40 else '< 40%，只做总龙头首阴 / 高标被砸')
     L_ = [f'## 模拟盘（{D}）', '', f'- 今天 9:25 全A竞价红盘率 **{red:.1%}**（{gate}）；按 {P} 收盘的候选执行。',
           f'- 账户净值 **{eq:.4f}**（2026-11-02 起始 1.0000），现金 {book["cash"] / eq:.0%}，持仓 {len(book["pos"])} 只。', '']
     L_ += ['**今天开盘买入**', ''] + ([f'- {b[0]}：{b[2]}（{b[1]}）开盘价 {b[3]:.2f}，仓位 {b[4] / eq_open:.0%}' for b in buys] or ['- 无']) + ['']
