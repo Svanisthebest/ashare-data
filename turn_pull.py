@@ -55,10 +55,17 @@ def main():
     beat("start")
     for i, c in enumerate(todo):
         try:
+            import signal
+            signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError("超时")))
+            signal.alarm(60)
             rows = pull(bs, c, a.start, a.end)
+            signal.alarm(0)
             if rows: parts.append(ckpt(rows, c))
         except Exception as e:
-            print("err", c, e, flush=True)
+            print("err", c, e, flush=True); rows = []
+            try: bs.logout()
+            except Exception: pass
+            bs.login()
         print(f"{i + 1}/{len(todo)} {c} {len(rows) if rows else 0}行 {time.time() - t0:.0f}s", flush=True)
         if (i + 1) % 5 == 0: beat("running", i + 1, c)
         if (i + 1) % 100 == 0: save()
