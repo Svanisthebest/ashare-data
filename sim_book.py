@@ -4,7 +4,7 @@ v1.2 模拟账本：按前一交易日的候选清单（data/plan/上一日.csv�
     python sim_book.py --date 20261102 --out data
 状态：data/sim/book.json（现金、持仓），流水：data/sim/trades.csv，当日报告：data/sim/YYYYMMDD.md
 不能用日线数据模拟的条件：低位跟随（要 9:40 成交量），模拟盘不做，报告里注明。
-v1.2：新增高标被砸（竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间才买，10%，最多 2 只）。
+v1.2：新增高标被砸（竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间开盘买，10%，最多 2 只；低开 3–5% 要 9:40 确认，模拟盘不做）。
 v1.1：去掉试验仓；总龙头首阴、低位启动每笔 25%；该卖那天若亏损且中证1000 跌 ≥ 1%，推迟一天卖（只推迟一次）。
 """
 import argparse, glob, json, os
@@ -65,7 +65,8 @@ def main():
             if s == 'L' and o >= t.loc[c, 'prev_close'] * 1.02: skips.append(f"{NAME[s]} {r['名称']}：高开 {o / t.loc[c, 'prev_close'] - 1:+.1%}，超过 2% 放弃"); continue
             if s == 'K':
                 pc_ = t.loc[c, 'prev_close']
-                if not (pc_ * 0.97 <= o < pc_): skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，不在 −3% 到 0 之间"); continue
+                if pc_ * 0.95 <= o < pc_ * 0.97: skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，要看 9:40 是否站上开盘价且高于 9:35，日线模拟不了，模拟盘不做（实盘按规则判断）"); continue
+                if not (pc_ * 0.97 <= o < pc_): skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，不在 −5% 到 0 之间"); continue
             val = min(W.get(s, 0.20) * eq_open, book['cash'])
             if val <= 0.01 * eq_open: break
             book['cash'] -= val
@@ -108,7 +109,7 @@ def main():
     L_ = [f'## 模拟盘（{D}）', '', f'- 今天 9:25 全A竞价红盘率 **{red:.1%}**（{gate}）；按 {P} 收盘的候选执行。',
           f'- 账户净值 **{eq:.4f}**（2026-11-02 起始 1.0000），现金 {book["cash"] / eq:.0%}，持仓 {len(book["pos"])} 只。', '']
     L_ += ['**今天开盘买入**', ''] + ([f'- {b[0]}：{b[2]}（{b[1]}）开盘价 {b[3]:.2f}，仓位 {b[4] / eq_open:.0%}' for b in buys] or ['- 无']) + ['']
-    na = [x for x in skips if '9:40' in x]; other = [x for x in skips if '9:40' not in x]
+    na = [x for x in skips if x.startswith(NAME['A'])]; other = [x for x in skips if not x.startswith(NAME['A'])]
     if na: other.append(f"低位跟随 {len(na)} 只：要用 9:40 成交量判断，日线数据模拟不了，模拟盘不做（实盘按规则自己判断）")
     if other: L_ += ['**按规则没买**', ''] + [f'- {x}' for x in other] + ['']
     L_ += ['**今天收盘卖出**', ''] + ([f'- {x[0]}：{x[2]} 买入 {x[3]:.2f} → 卖出 {x[4]:.2f}，{x[5]:+.1%}（{x[6]}）' for x in sells] or ['- 无']) + ['']
