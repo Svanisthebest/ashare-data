@@ -1,0 +1,103 @@
+{
+ "version": "v1.3",
+ "min_core": 1,
+ "max_positions": 5,
+ "order": [
+  "LD",
+  "L",
+  "M",
+  "N",
+  "B",
+  "K",
+  "D",
+  "P"
+ ],
+ "names": {
+  "B": "恐慌低吸",
+  "L": "2板龙头",
+  "LD": "总龙头强势首阴",
+  "D": "低位启动",
+  "M": "周一放宽",
+  "K": "高标被砸",
+  "N": "缩量断板低开",
+  "P": "首板强势未封低开"
+ },
+ "size": {
+  "LD": 30,
+  "L": 25,
+  "M": 25,
+  "N": 30,
+  "B": 20,
+  "K": 20,
+  "D": 25,
+  "P": 15
+ },
+ "cap": {
+  "N": 2,
+  "P": 2,
+  "K": 2,
+  "D": 3
+ },
+ "gate": {
+  "high": 0.55,
+  "low": 0.4,
+  "allowed_high": [
+   "LD",
+   "L",
+   "N",
+   "B",
+   "D",
+   "P"
+  ],
+  "allowed_mid": [
+   "LD",
+   "K",
+   "N",
+   "P",
+   "M"
+  ],
+  "allowed_low": [
+   "LD",
+   "K",
+   "N",
+   "P"
+  ]
+ },
+ "entry": {
+  "L": {
+   "type": "open",
+   "max_gap": 0.02
+  },
+  "N": {
+   "type": "open",
+   "min_gap": -0.05,
+   "max_gap": 0.0
+  },
+  "P": {
+   "type": "open",
+   "min_gap": -0.05,
+   "max_gap": 0.0
+  },
+  "K": {
+   "type": "limit_from_open",
+   "min_gap": -0.03,
+   "max_gap": 0.0,
+   "limit_mult": 0.97
+  }
+ },
+ "sell": {
+  "stop": 0.08,
+  "stop_B": 0.15,
+  "B_trail": 0.1,
+  "B_max_days": 20,
+  "max_days": 11,
+  "LD_extra_ratio": 0.7,
+  "LD_extra_max": 3,
+  "delay_index_drop": -0.01,
+  "delay_once": true
+ },
+ "notes": [
+  "N、P 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单",
+  "卖出：不涨停就 14:50 尾盘卖；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天"
+ ]
+}

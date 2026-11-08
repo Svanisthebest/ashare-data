@@ -48,6 +48,28 @@ CAP = {'N': 2, 'P': 2, 'K': 2, 'D': 3}
 SIZE = {'LD': 30, 'L': 25, 'M': 25, 'N': 30, 'B': 20, 'K': 20, 'D': 25, 'P': 15}
 
 
+def write_helper_files(out, D):
+    """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
+    import json
+    hp = os.path.join(out, 'helper'); os.makedirs(hp, exist_ok=True)
+    rules = dict(version='v1.3', min_core=1, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
+                 gate=dict(high=0.55, low=0.40,
+                           allowed_high=[s for s in ORDER if s not in ('K', 'M')],
+                           allowed_mid=['LD', 'K', 'N', 'P', 'M'],
+                           allowed_low=['LD', 'K', 'N', 'P']),
+                 entry={'L': dict(type='open', max_gap=0.02),
+                        'N': dict(type='open', min_gap=-0.05, max_gap=0.0),
+                        'P': dict(type='open', min_gap=-0.05, max_gap=0.0),
+                        'K': dict(type='limit_from_open', min_gap=-0.03, max_gap=0.0, limit_mult=0.97)},
+                 sell=dict(stop=0.08, stop_B=0.15, B_trail=0.10, B_max_days=20, max_days=11,
+                           LD_extra_ratio=0.7, LD_extra_max=3, delay_index_drop=-0.01, delay_once=True),
+                 notes=['N、P 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
+                        '卖出：不涨停就 14:50 尾盘卖；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天'])
+    json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
+    json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json',
+                   generated=dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')), open(os.path.join(hp, 'latest.json'), 'w'), ensure_ascii=False, indent=1)
+
+
 def index_state(root, date):
     fs = sorted(f for f in glob.glob(os.path.join(root, 'index', '*.csv')) if os.path.basename(f)[:8] <= date)[-20:]
     z = np.array([pd.read_csv(f).set_index('指数').close['中证1000'] for f in fs])
@@ -125,7 +147,7 @@ def main():
         add('N', code, f"昨 {int(pv.loc[code, 'lb'])} 板断板，量比 {r.amount / r.amt5:.1f}；开盘在 {r.close*0.95:.2f}–{r.close-0.01:.2f}（低开 0–5%）才开盘买", -int(pv.loc[code, 'lb']))
     # v1.3 首板强势未封低开：昨天首板，今天没涨停但涨 ≥ 涨停幅 70%（主板 7%、20cm 14%），成交额 ≤ 前 5 日均额 × 2.5；次日低开 0–5% 开盘买
     pp = td[td.index.isin(pv[pv.zt & (pv.lb == 1)].index) & ~td.zt & (td.ret >= 0.7 * lim_) & (td.amount <= 2.5 * td.amt5) & (td.n >= 60)]
-    for code, r in pp.sort_values('ret', ascending=False).iterrows():
+    for code, r in pp.iterrows():   # 与回测一致：按代码顺序
         add('P', code, f"昨首板今涨 {r.ret*100:.1f}% 未封，量比 {r.amount / r.amt5:.1f}；开盘在 {r.close*0.95:.2f}–{r.close-0.01:.2f}（低开 0–5%）才开盘买", -r.ret)
     # 周一放宽（v1.3 去掉强势回调，候选池不变）：近 6 日 ≥ 2 个涨停、今天没涨停、从 5 日高点回撤 > 8%、在 10 日线上，中证1000 在 5 日线上
     cc = td[(td.n >= 60) & (td.zt5 >= 2) & (~td.zt) & (td.adj < td.hi5 * 0.92) & (td.adj > td.ma10)]
@@ -163,6 +185,7 @@ def main():
           '- 资金大时 9:30–10:00 分几次买，单只不超过该股昨日成交额的 4%。',
           '- 空闲资金放国债逆回购或货币 ETF，要用时开盘先卖。']
     open(os.path.join(a.out, 'plan', f'{D}.md'), 'w').write('\n'.join(L))
+    write_helper_files(a.out, D)
     print('\n'.join(L))
 
 

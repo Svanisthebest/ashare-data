@@ -1,0 +1,26 @@
+name: helper-build
+# 打包电脑端「A股开单助手」启动器为 Windows exe，发布到 Release「helper」。
+# 只有 helper/launcher.py 改动才需要重新打包；核心程序 helper/core.py 和规则每次启动自动从仓库下载。
+on:
+  workflow_dispatch:
+  push:
+    paths: ['helper/launcher.py', '.github/workflows/helper_build.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: 打包
+        run: |
+          pip install pyinstaller==6.10.0
+          pyinstaller --onefile --console --name AshareHelper helper/launcher.py
+      - name: 发布
+        env: {GH_TOKEN: '${{ github.token }}'}
+        shell: bash
+        run: |
+          gh release view helper >/dev/null 2>&1 || gh release create helper --title "A股开单助手（Windows）" --notes "下载 AshareHelper.exe，双击运行。核心程序和规则每次启动自动从仓库同步。"
+          gh release upload helper dist/AshareHelper.exe --clobber
