@@ -1,0 +1,18 @@
+name: test-min5（临时测试，测完删除）
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install -q pandas baostock mootdx
+      - run: |
+          mkdir -p tmp/sim
+          echo '{"cash":0.5,"pos":[{"code":"001233","name":"海安集团","src":"P","entry":"20261105"},{"code":"600988","name":"赤峰黄金","src":"N","entry":"20261104"}],"last":"20261105"}' > tmp/sim/book.json
+          python min5_today.py --date 20261106 --out tmp
+          head -3 tmp/min5/20261106.csv; wc -l tmp/min5/20261106.csv
+          python -c "
+          from mootdx.quotes import Quotes
+          q=Quotes.factory(market='std',bestip=True,timeout=15); b=q.bars(symbol='001233',frequency=0,offset=100); print(b.tail(3)); print(b.columns.tolist())"
