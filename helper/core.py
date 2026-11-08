@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 1
+CORE_VERSION = 2
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -295,6 +295,24 @@ def build_sells():
     save_state(); log(f'卖出检查：{sum(r.get("action") == "卖出" for r in rows)} 只要卖，中证1000 {zr:+.2%}')
 
 
+def watch_breaks():
+    """v1.4：10:30 以后，持仓（今天以前买的、非恐慌低吸）盘中冲到涨停又打开 → 提醒立即卖出。"""
+    R = S.get('rules') or {}; sl = R.get('sell', {}); today = bj_now().strftime('%Y%m%d')
+    hold = [h for h in S['holdings'] if h['entry'] != today and h['src'] not in sl.get('break_exempt', ['B'])]
+    if not hold: return
+    q = quotes_some([h['code'] for h in hold]); names = R.get('names', {})
+    al = [a for a in S.get('breaks', []) if a['date'] == today]; seen = {a['code'] for a in al}
+    for h in hold:
+        x = q.get(h['code'])
+        if not x or not x.get('pc'): continue
+        up = limit_price(x['pc'], lim_of(h['code'], h['name']))
+        if x['high'] >= up - 0.005 and x['price'] < up - 0.005 and h['code'] not in seen:
+            al.append(dict(date=today, time=f'{bj_now():%H:%M:%S}', code=h['code'], name=h['name'], route=names.get(h['src'], h['src']),
+                           price=x['price'], up=up, buy=h['buy_price'], pnl=round((x['price'] / h['buy_price'] - 1) * 100, 2)))
+            log(f"炸板提醒：{h['name']}（{h['code']}）冲到涨停 {up:.2f} 后打开，现价 {x['price']:.2f}，按规则立即卖出")
+    with LOCK: S['breaks'] = al
+
+
 def pending_k():
     """盘中：高标被砸挂单是否可能已成交（最低价 ≤ 挂单价）。"""
     o = S.get('orders') or {}
@@ -324,6 +342,10 @@ def scheduler():
                 try:
                     with LOCK: S['k_watch'] = pending_k()
                 except Exception: pass
+            ba = ((S.get('rules') or {}).get('sell', {}).get('break_after') or '').replace(':', '')
+            if wk and ba and ba <= hm < '1457':
+                try: watch_breaks()
+                except Exception as e: log(f'炸板检查出错：{e}')
         except Exception: log('调度出错：' + traceback.format_exc()[-300:])
         time.sleep(15)
 
@@ -336,7 +358,7 @@ def api_state():
         return dict(core=CORE_VERSION, now=f'{bj_now():%Y-%m-%d %H:%M:%S}', rules_version=R.get('version'), plan=S.get('latest'), plan_status=plan_status(),
                     plan_err=S.get('plan_err'), plan_loaded=S.get('plan_loaded'), cand=S.get('cand') or [], names=R.get('names', {}), size=R.get('size', {}),
                     notes=R.get('notes', []), equity=S.get('equity'), holdings=S['holdings'], orders=o if o.get('date') == today else None, sells=x if x.get('date') == today else None,
-                    k_watch=S.get('k_watch'), md=S.get('md', ''), log=S.get('log', [])[-30:], mirror=S.get('mirror', ''), home=HOME)
+                    k_watch=S.get('k_watch'), breaks=[a for a in S.get('breaks', []) if a['date'] == today], md=S.get('md', ''), log=S.get('log', [])[-30:], mirror=S.get('mirror', ''), home=HOME)
 
 
 def api_post(path, body):
@@ -403,6 +425,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="row">手动红盘率%（抓不到全市场时填，留空=自动）<input id="red" size="6"><button onclick="post('/api/orders',{red:val('red')})">生成开单单</button><span id="gate"></span></div>
 <div id="orders"></div></div>
 <div class="card"><h2>② 盘中：高标被砸挂单</h2><div id="kw" class="mute">无</div></div>
+<div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖）</h2><div id="brk" class="mute">无</div></div>
 <div class="card"><h2>③ 14:47 卖出检查（自动，也可手动）</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
 <div class="card"><h2>持仓（只存在本机）</h2><div id="hold"></div>
 <div class="row" style="margin-top:8px">手动添加：代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="9" placeholder="YYYYMMDD"><button onclick="addh()">添加</button></div></div>
@@ -411,7 +434,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="card"><h2>设置与日志</h2><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
 <p class="mute">仅供参考，不构成投资建议；规则来自历史回测，下单以券商软件为准。数据：东方财富、腾讯行情；计划与规则来自 GitHub 仓库，每次启动自动同步。</p></div>
 </main><script>
-let st={},seenO='',seenS='';const $=id=>document.getElementById(id),val=id=>$(id).value;
+let st={},seenO='',seenS='',seenB=-1;const $=id=>document.getElementById(id),val=id=>$(id).value;
 function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 async function post(p,b={}){const r=await (await fetch(p,{method:'POST',body:JSON.stringify(b)})).json();if(!r.ok)alert(r.err);load()}
 function beep(){try{const a=new AudioContext(),o=a.createOscillator();o.connect(a.destination);o.frequency.value=880;o.start();setTimeout(()=>o.stop(),400)}catch(e){}}
@@ -427,6 +450,8 @@ const O=st.orders;if(O){$('gate').innerHTML=` <span class="big">${(O.red*100).to
 $('orders').innerHTML=tbl(['路线','代码','名称','竞价价','竞价涨跌','动作','股数','金额','说明',''],O.rows.map(r=>`<tr><td>${esc(r.route)}</td><td>${r.code}</td><td>${esc(r.name)}</td><td>${r.price??''}</td><td>${r.gap!=null?r.gap+'%':''}</td><td class="${r.action!=='不买'?'buy':'mute'}">${r.action}${r.limit&&r.action!=='不买'?' '+r.limit:''}</td><td>${r.shares||''}</td><td>${r.amount||''}</td><td>${esc(r.why)}</td><td>${r.action!=='不买'&&!r.done?`<button onclick="bought('${r.code}',${r.limit},${r.shares})">已成交</button>`:(r.done?'已记入':'')}</td></tr>`))+`<p class="mute">开单后剩余可用约 ${O.cash_left} 元</p>`;
 if(O.time!==seenO&&seenO!==''){notify('开单单已生成')}seenO=O.time}
 const K=st.k_watch||[];$('kw').innerHTML=K.length?tbl(['代码','名称','挂单价','最低','现价',''],K.map(k=>`<tr><td>${k.code}</td><td>${esc(k.name)}</td><td>${k.limit}</td><td>${k.low}</td><td>${k.price}</td><td class="${k.hit?'buy':'mute'}">${k.hit?'最低价已到挂单价，去券商确认是否成交':'未到'}</td></tr>`)):'无';
+const BR=st.breaks||[];$('brk').innerHTML=BR.length?tbl(['时间','代码','名称','路线','涨停价','现价','盈亏',''],BR.map(a=>`<tr><td>${a.time}</td><td>${a.code}</td><td>${esc(a.name)}</td><td>${esc(a.route)}</td><td>${a.up}</td><td>${a.price}</td><td>${a.pnl}%</td><td class="sell">立即卖出 <button onclick="sold('${a.code}',${a.price})">已卖出</button></td></tr>`)):'无';
+if(BR.length>seenB&&seenB>=0){notify('持仓炸板，按规则卖出')}seenB=BR.length;
 const X=st.sells;if(X){$('zz').textContent=`（${X.time}，中证1000 ${X.zz1000??''}%）`;
 $('sells').innerHTML=tbl(['代码','名称','路线','买入价','现价','今日','盈亏','天数','建议','原因',''],X.rows.map(r=>`<tr><td>${r.code}</td><td>${esc(r.name)}</td><td>${esc(r.route)}</td><td>${r.buy}</td><td>${r.price??''}</td><td>${r.ret!=null?r.ret+'%':''}</td><td>${r.pnl!=null?r.pnl+'%':''}</td><td>${r.days??''}</td><td class="${r.action==='卖出'?'sell':'warn'}">${r.action}</td><td>${esc(r.why)}</td><td>${r.action==='卖出'?`<button onclick="sold('${r.code}',${r.price})">已卖出</button>`:(r.action!=='?'&&!r.done&&r.set?`<button class="ghost" onclick="post('/api/keep',{code:'${r.code}'})">按建议记录</button>`:'')}</td></tr>`));
 if(X.time!==seenS&&seenS!==''){notify('卖出检查已完成')}seenS=X.time}
