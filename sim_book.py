@@ -6,7 +6,7 @@ v1.4 模拟账本：按前一交易日的候选清单（data/plan/上一日.csv�
 v1.3：核心优先（总龙头首阴 30%、2板龙头 25%、周一放宽 25%）；新增缩量断板低开（30%，≤2 只）、首板强势未封低开（15%，≤2 只），
 两者不受竞价开关限制、只在低开 0–5% 时开盘买；高标被砸 20%，开盘在昨收 −3%~0 时挂开盘价 ×0.97 买单（日线按最低价判断是否成交）；
 去掉跌深反弹、强势回调、低位跟随（已有的旧路线持仓仍按原规则卖）。
-v1.4：新增 2板断板强收（15%，≤2 只，同样低开 0–5% 开盘买、不受开关限制）。「10:30 后炸板即卖」要分时数据，日线模拟盘做不了，仍按收盘价卖（比实盘略保守）。
+v1.4：新增 2板断板强收（15%，≤2 只，同样低开 0–5% 开盘买、不受开关限制）。「10:30 后炸板即卖」用收盘后取到的当天 5 分钟线（min5_today.py → data/min5/）执行，取不到时按收盘价。
 v1.2：新增高标被砸（竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间开盘买，10%，最多 2 只；低开 3–5% 要 9:40 确认，模拟盘不做）。
 v1.1：去掉试验仓；总龙头首阴、低位启动每笔 25%；该卖那天若亏损且中证1000 跌 ≥ 1%，推迟一天卖（只推迟一次）。
 """
@@ -78,8 +78,13 @@ def main():
             book['cash'] -= val
             book['pos'].append(dict(code=c, name=r['名称'], src=s, entry=D, ep=ep, val=val, cost=val, last=ep, peak=ep, held=0, extra=0))
             held.add(c); buys.append((NAME[s], c, r['名称'], ep, val))
-    # ---------- 收盘卖出 ----------
+    # ---------- 收盘卖出（v1.4：有当天 5 分钟线时，先看 10:30 后是否冲到涨停又打开）----------
     sells, keep = [], []
+    m5f = os.path.join(a.out, 'min5', f'{D}.csv'); M5 = {}
+    if os.path.exists(m5f):
+        mm = pd.read_csv(m5f, dtype={'code': str, 'time': str})
+        M5 = {c: g.sort_values('time') for c, g in mm.groupby('code')}
+    no_m5 = []
     for p in book['pos']:
         p.pop('note', None)
         c = p['code']; cl = px(c, 'close')
@@ -87,8 +92,16 @@ def main():
         p['held'] += 1; p['peak'] = max(p['peak'], cl)
         locked = t.loc[c, 'high'] == t.loc[c, 'low'] and cl <= t.loc[c, 'dn'] + 0.005
         zt = cl >= t.loc[c, 'up'] - 0.005; dr = cl / t.loc[c, 'prev_close'] - 1; L = t.loc[c, 'lim']
-        why = None
-        if p['entry'] != D and not locked:
+        why = None; sp = cl
+        if p['entry'] != D and not locked and p['src'] not in ('B', 'RB'):
+            g = M5.get(c)
+            if g is None or len(g) < 40: no_m5.append(p['name'])
+            else:
+                up = t.loc[c, 'up']; touched = False
+                for tt, h, c5 in zip(g.time.str.zfill(4), g.high.astype(float), g.close.astype(float)):
+                    if h >= up - 0.005: touched = True
+                    if touched and c5 < up - 0.005 and tt >= '1030': why = f'10:30 后冲到涨停又打开，{tt[:2]}:{tt[2:]} 卖'; sp = c5; break
+        if why is None and p['entry'] != D and not locked:
             cs = 0.15 if p['src'] in ('B', 'RB') else 0.08
             if cl < p['ep'] * (1 - cs): why = f'收盘亏超 {cs:.0%} 止损'
             elif p['src'] == 'RB' and p['held'] >= 5: why = '拿满 5 天'
@@ -101,8 +114,8 @@ def main():
             if why is None and p['src'] not in ('RB', 'B') and p['held'] >= 11: why = '拿满 11 天'
         if why:
             cost = p.get('cost', p['val'] * p['ep'] / p['last'])   # 买入时投入的金额
-            r_ = cl / p['ep'] - 1 - 0.003; book['cash'] += cost * (1 + r_)   # 按买入金额 × 买入以来收益结算，不能用已逐日更新的市值再乘一次
-            sells.append((NAME[p['src']], c, p['name'], p['ep'], cl, r_, why))
+            r_ = sp / p['ep'] - 1 - 0.003; book['cash'] += cost * (1 + r_)   # 按买入金额 × 买入以来收益结算，不能用已逐日更新的市值再乘一次
+            sells.append((NAME[p['src']], c, p['name'], p['ep'], sp, r_, why))
         else:
             p['val'] = p['val'] * cl / p['last']; p['last'] = cl; keep.append(p)
     # 已卖的按卖出处理；未卖的 val 已按收盘更新
@@ -119,7 +132,8 @@ def main():
     L_ += ['**今天买入**', ''] + ([f'- {b[0]}：{b[2]}（{b[1]}）买入价 {b[3]:.2f}，仓位 {b[4] / eq_open:.0%}' for b in buys] or ['- 无']) + ['']
     other = skips
     if other: L_ += ['**按规则没买**', ''] + [f'- {x}' for x in other] + ['']
-    L_ += ['**今天收盘卖出**', ''] + ([f'- {x[0]}：{x[2]} 买入 {x[3]:.2f} → 卖出 {x[4]:.2f}，{x[5]:+.1%}（{x[6]}）' for x in sells] or ['- 无']) + ['']
+    L_ += ['**今天卖出**', ''] + ([f'- {x[0]}：{x[2]} 买入 {x[3]:.2f} → 卖出 {x[4]:.2f}，{x[5]:+.1%}（{x[6]}）' for x in sells] or ['- 无']) + ['']
+    if no_m5: L_ += [f"（{'、'.join(no_m5)} 没取到当天 5 分钟线，炸板规则没法判断，按收盘价处理）", '']
     L_ += ['**收盘持仓**', '']
     if book['pos']:
         L_ += ['| 路线 | 名称 | 买入日 | 买入价 | 今收 | 浮动 | 下一步 |', '|---|---|---|---|---|---|---|']
