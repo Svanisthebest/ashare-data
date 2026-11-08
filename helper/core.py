@@ -231,8 +231,14 @@ def build_orders(red_override=None):
                 lp = math.floor(o * e['limit_mult'] * 100) / 100; row['limit'] = lp; px = lp
                 row['action'] = '挂单'; row['why'] = f'开盘后挂 {lp:.2f}（开盘价 ×{e["limit_mult"]}），收盘前没成交就撤单'
             else:
-                px = min(round(o * 1.003 + 0.004, 2), up); row['limit'] = px
-                row['action'] = '买入'; row['why'] = f'9:25–9:30 挂 {px:.2f}（竞价价 {o:.2f} 略上）'
+                # 挂单价：竞价价 +0.5%（至少 +1 分钱），不超过路线的入场上限（2板龙头 < 昨收+2%，低开路线 < 昨收）和涨停价
+                cap = up
+                if 'max_gap' in e: cap = min(cap, math.ceil(pc * (1 + e['max_gap']) * 100) / 100 - 0.01)
+                px = min(max(math.floor(o * 1.005 * 100) / 100, round(o + 0.01, 2)), cap)
+                give = min(math.floor(o * 1.01 * 100) / 100, cap)     # 最高追价：竞价价 +1%
+                row['limit'] = px; row['give'] = give
+                row['action'] = '买入'
+                row['why'] = f'9:25–9:30 挂 {px:.2f}（竞价价 {o:.2f} +0.5%）；9:30 没成交可改到 {give:.2f}，再高就不买'
             lot = 200 if code.startswith('68') else 100
             sh = int(val / px // 100 * 100)
             if sh < lot: row['action'] = '不买'; row['why'] = f'资金不够买 {lot} 股'; continue
