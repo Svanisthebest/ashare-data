@@ -27,6 +27,24 @@ def main():
         except Exception as e:
             signal.alarm(0); print('取分钟线失败', c, e)
     bs.logout()
+    got = {r[0] for r in rows}; miss = [c for c in codes if c not in got]
+    if miss:   # baostock 当天数据可能还没更新 → 改用通达信 5 分钟 K 线
+        try:
+            import subprocess, sys
+            subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'mootdx'], check=False)
+            from mootdx.quotes import Quotes
+            q = Quotes.factory(market='std', bestip=True, timeout=15)
+            for c in miss:
+                b = q.bars(symbol=c, frequency=0, offset=100)
+                if b is None or not len(b): continue
+                b = b.reset_index(drop=False)
+                tcol = 'datetime' if 'datetime' in b.columns else b.columns[0]
+                b['dt'] = pd.to_datetime(b[tcol]); b = b[b.dt.dt.strftime('%Y-%m-%d') == d]
+                for _, r in b.iterrows():
+                    rows.append([c, d, r.dt.strftime('%Y%m%d%H%M%S000'), r['open'], r['high'], r['low'], r['close'], r.get('vol', r.get('volume', 0)), r.get('amount', 0)])
+            print('通达信补取', len(miss), '只')
+        except Exception as e:
+            print('通达信也没取到', e)
     if not rows: print('分钟线还没有当天数据'); return
     df = pd.DataFrame(rows, columns=['code', 'date', 'time', 'open', 'high', 'low', 'close', 'volume', 'amount'])
     df['time'] = df.time.str[8:12]
