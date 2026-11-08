@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 2
+CORE_VERSION = 3
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -302,6 +302,10 @@ def watch_breaks():
     if not hold: return
     q = quotes_some([h['code'] for h in hold]); names = R.get('names', {})
     al = [a for a in S.get('breaks', []) if a['date'] == today]; seen = {a['code'] for a in al}
+    # 与回测一致：按 5 分钟 K 线收盘判断——只在每个 5 分钟整点（如 10:35、10:40）看一次价格，盘中一闪而过又回封的不算
+    now = bj_now(); slot = now.strftime('%H') + f'{now.minute // 5 * 5:02d}'
+    if S.get('break_slot') == slot: return
+    S['break_slot'] = slot
     for h in hold:
         x = q.get(h['code'])
         if not x or not x.get('pc'): continue
