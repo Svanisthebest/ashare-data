@@ -30,7 +30,7 @@ def load(root, date, n_days=125):
     if not fs or os.path.basename(fs[-1])[:8] != date:
         raise SystemExit(f"历史库没有 {date}")
     df = pd.concat((pd.read_csv(f, dtype={"code": str}) for f in fs), ignore_index=True)
-    df = df[(df.prev_close > 0) & (df.close > 0)].copy()
+    df = df[(df.prev_close > 0) & (df.close > 0) & (df.volume > 0)].copy()   # 停牌日（成交量 0）剔除，与研究口径一致
     c = df.code
     df["board"] = np.select([c.str.startswith(("688", "689")), c.str.startswith(("300", "301")),
                              c.str.match(r"^(4|8|92)")], ["科创", "创业", "北交"], "主板")
