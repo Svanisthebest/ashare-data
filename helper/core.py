@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 4
+CORE_VERSION = 5
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -488,7 +488,7 @@ if(document.activeElement!==$('eq'))$('eq').value=st.equity||'';if(document.acti
 $('acct').textContent=`持仓 ${st.holdings.length} / 5 只；数据目录 ${st.home}`;
 if(!$('hs').options.length)for(const k in st.names){const o=document.createElement('option');o.value=k;o.textContent=st.names[k];$('hs').appendChild(o)}
 const O=st.orders;if(O){$('gate').innerHTML=` <span class="big">${(O.red*100).toFixed(1)}%</span>（${O.red_src}，${esc(O.time)}）→ 竞价 ${O.gate}，可做：${O.allowed.join('、')}`;
-$('orders').innerHTML=tbl(['路线','代码','名称','竞价价','竞价涨跌','动作','建议仓位','股数','金额','说明',''],O.rows.map(r=>`<tr><td>${esc(r.route)}</td><td>${r.code}</td><td>${esc(r.name)}</td><td>${r.price??''}</td><td>${r.gap!=null?r.gap+'%':''}</td><td class="${r.action!=='不买'?'buy':'mute'}">${r.action}${r.limit&&r.action!=='不买'?' '+r.limit:''}</td><td>${r.pct!=null?r.pct+'%'+(r.pct_amt?'<br><span class="mute">约 '+r.pct_amt+' 元</span>':''):''}</td><td>${r.shares||''}</td><td>${r.amount||''}</td><td>${esc(r.why)}</td><td>${r.action!=='不买'&&!r.done?`<button onclick="bought('${r.code}',${r.limit},${r.shares})">已成交</button>`:(r.done?'已记入':'')}</td></tr>`))+`<p class="mute">开单后剩余可用约 ${O.cash_left} 元</p>`;
+$('orders').innerHTML=tbl(['路线','代码','名称','竞价价','竞价涨跌','动作','建议仓位','股数','金额','说明',''],O.rows.map(r=>`<tr><td>${esc(r.route)}</td><td>${r.code}</td><td>${esc(r.name)}</td><td>${r.price??''}</td><td>${r.gap!=null?r.gap+'%':''}</td><td class="${r.action!=='不买'?'buy':'mute'}">${r.action}${r.limit&&r.action!=='不买'?' '+r.limit:''}</td><td>${(()=>{const pc=r.pct??st.size[r.src];if(pc==null)return '';const am=r.pct_amt??(O.equity?Math.round(pc/100*O.equity):null);return pc+'%'+(am?'<br><span class="mute">约 '+am+' 元</span>':'')})()}</td><td>${r.shares||''}</td><td>${r.amount||''}</td><td>${esc(r.why)}</td><td>${r.action!=='不买'&&!r.done?`<button onclick="bought('${r.code}',${r.limit},${r.shares})">已成交</button>`:(r.done?'已记入':'')}</td></tr>`))+`<p class="mute">开单后剩余可用约 ${O.cash_left} 元</p>`;
 if(O.time!==seenO&&seenO!==''){notify('开单单已生成')}seenO=O.time}
 const K=st.k_watch||[];$('kw').innerHTML=K.length?tbl(['代码','名称','挂单价','最低','现价',''],K.map(k=>`<tr><td>${k.code}</td><td>${esc(k.name)}</td><td>${k.limit}</td><td>${k.low}</td><td>${k.price}</td><td class="${k.hit?'buy':'mute'}">${k.hit?'最低价已到挂单价，去券商确认是否成交':'未到'}</td></tr>`)):'无';
 const BR=st.breaks||[];$('brk').innerHTML=BR.length?tbl(['时间','代码','名称','路线','涨停价','现价','盈亏',''],BR.map(a=>`<tr><td>${a.time}</td><td>${a.code}</td><td>${esc(a.name)}</td><td>${esc(a.route)}</td><td>${a.up}</td><td>${a.price}</td><td>${a.pnl}%</td><td class="sell">立即卖出 <button onclick="sold('${a.code}',${a.price})">已卖出</button></td></tr>`)):'无';
