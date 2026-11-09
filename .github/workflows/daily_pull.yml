@@ -78,3 +78,8 @@ jobs:
           git commit -m "data ${{ steps.d.outputs.date }}" || echo "没有新数据"
           git pull --rebase
           git push
+
+      - name: 清 jsDelivr 缓存（助手走 CDN 时也能读到今天的计划）
+        if: always()
+        run: |
+          for p in data/helper/latest.json data/helper/rules.json helper/core.py; do curl -s -m 20 "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$p" || true; echo; done

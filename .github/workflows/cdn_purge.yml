@@ -1,0 +1,20 @@
+name: cdn_purge
+# 清 jsDelivr 缓存：助手在 GitHub 直连不通时会走 jsDelivr，它默认缓存 @main 最长 12 小时，导致读到旧版本
+on:
+  push:
+    branches: [main]
+    paths: ['helper/core.py', 'data/helper/**']
+  workflow_dispatch:
+  workflow_call:
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for p in helper/core.py data/helper/latest.json data/helper/rules.json; do
+            curl -s "https://purge.jsdelivr.net/gh/Svanisthebest/ashare-data@main/$p"; echo
+          done
+          sleep 20
+          curl -s https://cdn.jsdelivr.net/gh/Svanisthebest/ashare-data@main/helper/core.py | grep -m1 "^CORE_VERSION"
+          curl -s https://fastly.jsdelivr.net/gh/Svanisthebest/ashare-data@main/helper/core.py | grep -m1 "^CORE_VERSION"
+          curl -s "https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main/helper/core.py?t=$(date +%s)" | grep -m1 "^CORE_VERSION" || echo ghfast 不通
