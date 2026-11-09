@@ -1,0 +1,33 @@
+name: 竞价过程采集（研究用）
+# 每个交易日 9:15–9:25 每 10 秒记录观察名单的竞价快照。北京时间 8:30 启动，留足 GitHub 定时延迟
+on:
+  schedule:
+    - cron: '30 0 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "测试模式（立即抓一次，不保存）"
+        default: "1"
+permissions:
+  contents: write
+jobs:
+  ticks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q pandas requests
+      - env:
+          TEST: ${{ github.event.inputs.test == '1' && '1' || '' }}
+        run: python auction_ticks.py
+      - name: 提交
+        if: github.event.inputs.test != '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/auction_ticks || true
+          git commit -m "竞价过程 $(TZ=Asia/Shanghai date +%Y%m%d)" || exit 0
+          for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
