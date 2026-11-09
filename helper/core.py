@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 5
+CORE_VERSION = 6
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -145,7 +145,8 @@ def quotes_some(codes):
             k, v = line.split('="', 1); f = v.strip('"\n').split('~')
             if len(f) < 35: continue
             c = k[-6:]; key = 'ZZ1000' if k.endswith('sh000852') else c
-            try: out[key] = dict(code=c, name=f[1], price=float(f[3]), pc=float(f[4]), open=float(f[5]), high=float(f[33]), low=float(f[34]), date=f[30][:8])
+            try: out[key] = dict(code=c, name=f[1], price=float(f[3]), pc=float(f[4]), open=float(f[5]), high=float(f[33]), low=float(f[34]), date=f[30][:8],
+                                 amount=float(f[37] or 0) * 1e4 if len(f) > 37 else 0.0)
             except Exception: pass
     return out
 
@@ -213,7 +214,9 @@ def build_orders(red_override=None):
         if len(univ) < 3000: raise RuntimeError(f'全市场行情只有 {len(univ)} 只，算不了红盘率；可以在页面上手动填写红盘率')
         red = sum(q['open'] > q['pc'] for q in univ) / len(univ)
     some = quotes_some(list({c['代码'] for c in cand} | {h['code'] for h in S['holdings']}))
-    for c, q in some.items(): allq.setdefault(c, q)
+    for c, q in some.items():
+        if c in allq and not allq[c].get('amount') and q.get('amount'): allq[c]['amount'] = q['amount']
+        allq.setdefault(c, q)
     g = R['gate']
     allowed = set(g['allowed_high']) if red > g['high'] else set(g['allowed_mid']) if red >= g['low'] else set(g['allowed_low'])
     gate_txt = f"> {g['high']:.0%}" if red > g['high'] else (f"{g['low']:.0%}–{g['high']:.0%}" if red >= g['low'] else f"< {g['low']:.0%}")
@@ -243,6 +246,15 @@ def build_orders(red_override=None):
             e = R['entry'].get(s, {'type': 'open'})
             if 'max_gap' in e and not gap < e['max_gap']: row['why'] = f"竞价 {gap:+.1%}，要低于 {e['max_gap']:+.0%}"; continue
             if 'min_gap' in e and not gap >= e['min_gap']: row['why'] = f"竞价 {gap:+.1%}，低于 {e['min_gap']:+.0%} 不买"; continue
+            if 'auc_ratio' in e:
+                lo_, hi_ = e['auc_ratio']
+                try: a5 = float(c.get('均额5日亿') or 0) * 1e8
+                except Exception: a5 = 0.0
+                auc = float(q.get('amount') or 0)
+                if a5 <= 0: row['why'] = '计划里没有 5 日均额，无法判断竞价量'; continue
+                if auc <= 0: row['why'] = f'没取到竞价成交额：请在行情软件看 9:25 竞价额，在 {a5 * lo_ / 1e4:.0f}–{a5 * hi_ / 1e4:.0f} 万之间才买'; continue
+                row['auc'] = round(auc / 1e4); rr = auc / a5
+                if not lo_ <= rr < hi_: row['why'] = f'竞价额 {auc / 1e4:.0f} 万 = 5 日均额的 {rr:.1%}，要在 {lo_:.0%}–{hi_:.0%}（{"量没跟上，疑似诱多" if rr < lo_ else "量过大，疑似出货"}）'; continue
             val = min(R['size'].get(s, 20) / 100 * equity, cash)
             if equity <= 0: row['why'] = '先在页面上填写账户总资产'; continue
             if val <= 0.01 * equity: row['why'] = '可用资金不足'; continue
@@ -258,6 +270,7 @@ def build_orders(red_override=None):
                 row['limit'] = px; row['give'] = give
                 row['action'] = '买入'
                 row['why'] = f'9:25–9:30 挂 {px:.2f}（竞价价 {o:.2f} +0.5%）；9:30 没成交可改到 {give:.2f}，再高就不买'
+                if row.get('auc'): row['why'] += f"；竞价额 {row['auc']} 万，在要求区间内"
             lot = 200 if code.startswith('68') else 100
             sh = int(val / px // 100 * 100)
             if sh < lot: row['action'] = '不买'; row['why'] = f'资金不够买 {lot} 股'; continue

@@ -12,7 +12,7 @@ v1.1 相对 v1：总龙头首阴要求昨日最高板 ≥ 4；强势回调要求
     python v1_plan.py --date 20261030 --out data
 输出 data/plan/YYYYMMDD.md（次日计划）和 data/plan/YYYYMMDD.csv（全部候选）。
 """
-import argparse, glob, os, datetime as dt
+import argparse, time, glob, os, datetime as dt
 import numpy as np, pandas as pd
 import clusters_daily
 
@@ -43,29 +43,74 @@ def _load(root, date, n_days):
     return df
 
 NAME = {'B': '恐慌低吸', 'L': '2板龙头', 'LD': '总龙头强势首阴', 'D': '低位启动', 'M': '周一放宽', 'K': '高标被砸',
-        'N': '缩量断板低开', 'P': '首板强势未封低开', 'Q': '2板断板强收'}
-ORDER = ['LD', 'L', 'M', 'N', 'B', 'K', 'D', 'P', 'Q']
-CAP = {'N': 2, 'P': 2, 'Q': 2, 'K': 2, 'D': 3}
-SIZE = {'LD': 30, 'L': 25, 'M': 25, 'N': 30, 'B': 20, 'K': 20, 'D': 25, 'P': 15, 'Q': 15}
+        'N': '缩量断板低开', 'P': '首板强势未封低开', 'Q': '2板断板强收', 'Y': '炸板弱转强'}
+ORDER = ['LD', 'L', 'M', 'N', 'B', 'K', 'D', 'P', 'Q', 'Y']
+CAP = {'N': 2, 'P': 2, 'Q': 2, 'K': 2, 'D': 3, 'Y': 2}
+SIZE = {'LD': 30, 'L': 25, 'M': 25, 'N': 30, 'B': 20, 'K': 20, 'D': 25, 'P': 15, 'Q': 15, 'Y': 15}
+
+
+def sealed_minutes(codes, D, ups):
+    """收盘后取当天 1 分钟线，返回 {code: 在涨停价的分钟数}（≥1 分钟才算封过）；取不到的列在第二个返回值。
+    先用通达信（与研究相同），失败再用 baostock 5 分钟线（5 分钟收盘在涨停价）。"""
+    res, miss = {}, []
+    if not codes: return res, miss
+    c = None
+    try:
+        from mootdx.quotes import Quotes
+        c = Quotes.factory(market='std', bestip=False, timeout=15)
+    except Exception as e:
+        print('通达信连接失败', e)
+    left = []
+    for code in codes:
+        n = None
+        if c is not None:
+            for k in range(2):
+                try:
+                    m = c.minutes(symbol=code, date=D)
+                    if m is None or not len(m): m = c.minute(symbol=code)
+                    if m is not None and len(m) >= 200:
+                        n = int((m.price.astype(float) >= ups[code] - 0.005).sum()); break
+                except Exception:
+                    time.sleep(1)
+        if n is None: left.append(code)
+        elif n >= 1: res[code] = n
+    if left:
+        try:
+            import baostock as bs
+            bs.login(); d_ = f'{D[:4]}-{D[4:6]}-{D[6:]}'
+            for code in left:
+                sym = ('sh.' if code.startswith(('6', '9')) else 'sz.') + code
+                rs = bs.query_history_k_data_plus(sym, 'time,close', start_date=d_, end_date=d_, frequency='5', adjustflag='3')
+                rows = []
+                while rs.error_code == '0' and rs.next(): rows.append(rs.get_row_data())
+                if len(rows) >= 40:
+                    n = sum(float(x[1]) >= ups[code] - 0.005 for x in rows) * 5
+                    if n: res[code] = n
+                else: miss.append(code)
+            bs.logout()
+        except Exception as e:
+            print('baostock 失败', e); miss += [x for x in left if x not in res and x not in miss]
+    return res, miss
 
 
 def write_helper_files(out, D):
     """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
     import json
     hp = os.path.join(out, 'helper'); os.makedirs(hp, exist_ok=True)
-    rules = dict(version='v1.4', min_core=2, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
+    rules = dict(version='v1.5', min_core=6, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
                  gate=dict(high=0.55, low=0.40,
                            allowed_high=[s for s in ORDER if s not in ('K', 'M')],
-                           allowed_mid=['LD', 'K', 'N', 'P', 'Q', 'M'],
-                           allowed_low=['LD', 'K', 'N', 'P', 'Q']),
+                           allowed_mid=['LD', 'K', 'N', 'P', 'Q', 'M', 'Y'],
+                           allowed_low=['LD', 'K', 'N', 'P', 'Q', 'Y']),
                  entry={'L': dict(type='open', max_gap=0.02),
                         'N': dict(type='open', min_gap=-0.05, max_gap=0.0),
                         'P': dict(type='open', min_gap=-0.05, max_gap=0.0),
                         'Q': dict(type='open', min_gap=-0.05, max_gap=0.0),
-                        'K': dict(type='limit_from_open', min_gap=-0.03, max_gap=0.0, limit_mult=0.97)},
+                        'K': dict(type='limit_from_open', min_gap=-0.03, max_gap=0.0, limit_mult=0.97),
+                        'Y': dict(type='open', min_gap=0.03, auc_ratio=[0.03, 0.10])},
                  sell=dict(stop=0.08, stop_B=0.15, B_trail=0.10, B_max_days=20, max_days=11,
                            LD_extra_ratio=0.7, LD_extra_max=3, delay_index_drop=-0.01, delay_once=True, break_after='10:30', break_exempt=['B']),
-                 notes=['N、P、Q 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
+                 notes=['Y（炸板弱转强）：竞价高开 ≥3% 且 竞价成交额是近 5 日平均成交额的 3%–10% 才开盘买；N、P、Q 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
                         '卖出：10:30 后冲到涨停又打开就立即卖；其余不涨停就 14:50 尾盘卖；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天'])
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
     json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json',
@@ -118,7 +163,7 @@ def main():
     C = []
     def add(src, code, why, rk):
         r = td.loc[code]; C.append(dict(路线=NAME[src], src=src, 代码=code, 名称=r['name'], 收盘=r.close,
-                                        涨跌=round(r.ret * 100, 1), 成交额亿=round(r.amount / 1e8, 1),
+                                        涨跌=round(r.ret * 100, 1), 成交额亿=round(r.amount / 1e8, 1), 均额5日亿=round(r.amt5 / 1e8, 3) if pd.notna(r.amt5) else None,
                                         位置120=round(r.pos120 * 100, 1) if pd.notna(r.pos120) else None, 说明=why, rk=rk))
     # 恐慌低吸
     if ndt >= 200:
@@ -155,6 +200,14 @@ def main():
     qq = td[td.index.isin(pv[pv.zt & (pv.lb == 2)].index) & ~td.zt & (td.ret >= 0.5 * lim_) & (td.amount <= 2.5 * td.amt5) & (td.n >= 60)]
     for code, r in qq.iterrows():
         add('Q', code, f"昨 2 板今涨 {r.ret*100:.1f}% 断板，量比 {r.amount / r.amt5:.1f}；开盘在 {r.close*0.95:.2f}–{r.close-0.01:.2f}（低开 0–5%）才开盘买", -r.ret)
+    # v1.5 炸板弱转强：今天盘中封住过涨停（分钟线至少 1 分钟在涨停价）但收盘没封住，收盘涨 ≥ 涨停幅 70%，上市 ≥ 60 日；
+    # 次日竞价高开 ≥ 3%（不是涨停价）且 竞价成交额 / 近 5 日平均成交额 在 3%–10% 才开盘买
+    zb = td[~td.zt & (td.ret >= 0.7 * lim_) & (td.high >= td.up - 0.005) & (td.n >= 60)]
+    seal, unk = sealed_minutes(list(zb.index), D, zb.up.to_dict())
+    for code, r in zb.sort_index().iterrows():
+        if code not in seal: continue
+        add('Y', code, f"今天封过涨停 {seal[code]} 分钟后被砸，收涨 {r.ret*100:.1f}%；明天竞价高开 ≥3%（≥ {r.close*1.03:.2f}）、且竞价成交额在 {r.amt5*0.03/1e4:.0f}–{r.amt5*0.10/1e4:.0f} 万（5 日均额的 3–10%）才开盘买", 0)
+    y_note = f"炸板 {len(zb)} 只，分钟线确认封过 {len(seal)} 只" + (f"，{len(unk)} 只没取到分钟线已跳过（{'、'.join(unk[:8])}）" if unk else '')
     # 周一放宽（v1.3 去掉强势回调，候选池不变）：近 6 日 ≥ 2 个涨停、今天没涨停、从 5 日高点回撤 > 8%、在 10 日线上，中证1000 在 5 日线上
     cc = td[(td.n >= 60) & (td.zt5 >= 2) & (~td.zt) & (td.adj < td.hi5 * 0.92) & (td.adj > td.ma10)]
     if above5 and monday:
@@ -166,15 +219,15 @@ def main():
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
     # 写计划
-    L = [f'# v1.4 计划：{d} 收盘 → {nxt}', '',
+    L = [f'# v1.5 计划：{d} 收盘 → {nxt}', '',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
-         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
+         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；{y_note}；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
          '## 9:25 竞价决定动作', '',
          '| 全A竞价红盘率 | 可做的路线 |', '|---|---|',
-         '| > 55% | 总龙头首阴、2板龙头、缩量断板低开、恐慌低吸、低位启动、首板强势未封低开、2板断板强收（高标被砸、周一放宽不做） |',
-         '| 40–55% | 总龙头首阴、缩量断板低开、高标被砸、首板强势未封低开、2板断板强收；周一另做周一放宽 |',
-         '| < 40% | 总龙头首阴、缩量断板低开、高标被砸、首板强势未封低开、2板断板强收 |', '',
-         '最多同时 5 只（含已有持仓）；缩量断板低开、首板强势未封低开、2板断板强收、高标被砸各最多 2 只，低位启动最多 3 只。顺序：总龙头首阴 → 2板龙头 → 周一放宽 → 缩量断板低开 → 恐慌低吸 → 高标被砸 → 低位启动 → 首板强势未封低开 → 2板断板强收。一字涨停或停牌跳过，用同路线下一只补；同一只股票只买一次（已持有或已在前面路线买过的跳过）。', '竞价红盘率口径：沪深 A 股（不含北交所、ST、退市、停牌），9:25 竞价价高于昨收的家数 ÷ 全部，平盘不算红；目前约 5,020 只，> 55% 约需 2,765 家，40% 约 2,010 家。', '']
+         '| > 55% | 总龙头首阴、2板龙头、缩量断板低开、恐慌低吸、低位启动、首板强势未封低开、2板断板强收、炸板弱转强（高标被砸、周一放宽不做） |',
+         '| 40–55% | 总龙头首阴、缩量断板低开、高标被砸、首板强势未封低开、2板断板强收、炸板弱转强；周一另做周一放宽 |',
+         '| < 40% | 总龙头首阴、缩量断板低开、高标被砸、首板强势未封低开、2板断板强收、炸板弱转强 |', '',
+         '最多同时 5 只（含已有持仓）；缩量断板低开、首板强势未封低开、2板断板强收、高标被砸、炸板弱转强各最多 2 只，低位启动最多 3 只。顺序：总龙头首阴 → 2板龙头 → 周一放宽 → 缩量断板低开 → 恐慌低吸 → 高标被砸 → 低位启动 → 首板强势未封低开 → 2板断板强收 → 炸板弱转强。一字涨停或停牌跳过，用同路线下一只补；同一只股票只买一次（已持有或已在前面路线买过的跳过）。', '竞价红盘率口径：沪深 A 股（不含北交所、ST、退市、停牌），9:25 竞价价高于昨收的家数 ÷ 全部，平盘不算红；目前约 5,020 只，> 55% 约需 2,765 家，40% 约 2,010 家。', '']
     for src in ORDER:
         x = P[P.src == src].sort_values('rk') if len(P) else P
         L.append(f'## {NAME[src]}（每笔 {SIZE[src]}%{"，最多 " + str(CAP[src]) + " 只" if src in CAP else ""}）')
@@ -187,6 +240,7 @@ def main():
           '- v1.1：到了该卖的那天，14:50 若持仓亏损且中证1000 当天跌 ≥ 1%，推迟一天再卖（只推迟一次；收盘亏 8% 仍止损）。',
           '- 14:50 前挂尾盘卖单；封死跌停卖不出就次日开盘卖；不用盘中止损单。', '',
           '## 执行', '', '- 9:25 竞价确认后开盘买：9:25–9:30 挂「竞价价 +0.5%」限价单；9:30 没成交最多改到竞价价 +1%，再高就不买（晚买平均多付 1% 以上，回测收益会明显下降）。2板龙头挂单价不超过昨收 +2%，低开路线不超过昨收；缩量断板低开、首板强势未封低开、2板断板强收只在开盘价低于昨收、且不低于昨收 −5% 时买，平开或高开不买。',
+          '- 炸板弱转强（v1.5）：竞价高开 ≥3%（不是涨停价）且竞价成交额在说明里给出的区间（近 5 日平均成交额的 3%–10%）才买，按竞价价 +0.5% 挂单。量太小是诱多、太大是出货，都不买。约三分之一买完当天会被砸，属于这条路线的正常情况，按卖出规则处理即可。',
           '- 高标被砸：开盘在昨收 −3% 到 0 之间时，开盘后挂「开盘价 × 0.97」限价买单，收盘前没成交就撤单（不追）。',
           '- 资金大时 9:30–10:00 分几次买，单只不超过该股昨日成交额的 4%。',
           '- 空闲资金放国债逆回购或货币 ETF，要用时开盘先卖。']

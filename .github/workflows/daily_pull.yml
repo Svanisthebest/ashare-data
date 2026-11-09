@@ -64,8 +64,9 @@ jobs:
         if: success()
         run: |
           D=$(ls data/daily | tail -1 | cut -c1-8)
+          pip install -q mootdx baostock || echo "分钟线依赖安装失败"
           python clusters_daily.py --date $D --out data && python v1_plan.py --date $D --out data || echo "计划生成失败"
-          pip install -q baostock && python min5_today.py --date $D --out data || echo "当天分钟线未取到，模拟盘按收盘价"
+          python min5_today.py --date $D --out data || echo "当天分钟线未取到，模拟盘按收盘价"
           python sim_book.py --date $D --out data || echo "模拟盘未更新（当天已处理过则沿用已有记录）"
           if [ -f data/sim/$D.md ] && [ -f data/plan/$D.md ] && ! grep -q "^## 模拟盘" data/plan/$D.md; then { echo; echo; cat data/sim/$D.md; } >> data/plan/$D.md; fi
 
