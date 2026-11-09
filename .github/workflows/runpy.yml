@@ -18,6 +18,7 @@ jobs:
           sparse-checkout: |
             ${{ github.event.inputs.script }}
             data/daily
+            data/theme/boards.csv
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
