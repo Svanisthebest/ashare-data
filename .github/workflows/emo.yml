@@ -1,0 +1,46 @@
+name: 情绪股竞价与分时回补（研究用）
+on:
+  workflow_dispatch:
+    inputs:
+      nshards: {default: "20"}
+      limit: {description: "每片只做前N行（0=全部）", default: "0"}
+      start: {default: "20160101"}
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.m.outputs.shards }}
+    steps:
+      - id: m
+        run: echo "shards=$(python3 -c "import json;print(json.dumps(list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
+      - env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release view emo -R ${{ github.repository }} || gh release create emo -R ${{ github.repository }} -t "情绪股竞价分时特征" -n "emo_pull.py 生成，研究用"
+  pull:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            emo_pull.py
+            emo_targets.csv.gz
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -q pandas mootdx
+      - name: 取上次的部分结果（续跑）
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          mkdir -p emo; f=$(printf "emo_%02dof%02d.csv.gz" ${{ matrix.shard }} ${{ github.event.inputs.nshards }})
+          gh release download emo -R ${{ github.repository }} -p "$f" -D emo || echo 无
+      - run: python emo_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --limit ${{ github.event.inputs.limit }} --start ${{ github.event.inputs.start }}
+      - if: always()
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release upload emo emo/*.csv.gz -R ${{ github.repository }} --clobber
