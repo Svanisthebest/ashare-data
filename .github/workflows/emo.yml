@@ -5,6 +5,7 @@ on:
       nshards: {default: "20"}
       limit: {description: "每片只做前N行（0=全部）", default: "0"}
       start: {default: "20160101"}
+      only: {description: "只跑这些分片（逗号分隔，空=全部）", default: ""}
 permissions:
   contents: write
 jobs:
@@ -14,7 +15,7 @@ jobs:
       shards: ${{ steps.m.outputs.shards }}
     steps:
       - id: m
-        run: echo "shards=$(python3 -c "import json;print(json.dumps(list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
+        run: echo "shards=$(python3 -c "import json;o='${{ github.event.inputs.only }}';print(json.dumps([int(x) for x in o.split(',')] if o else list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
       - env: {GH_TOKEN: "${{ github.token }}"}
         run: gh release view emo -R ${{ github.repository }} || gh release create emo -R ${{ github.repository }} -t "情绪股竞价分时特征" -n "emo_pull.py 生成，研究用"
   pull:
