@@ -8,6 +8,9 @@ import datetime, urllib.request, urllib.parse, urllib.error, http.server, http.c
 REPO = 'Svanisthebest/ashare-data'
 URLS = ['https://raw.githubusercontent.com/{r}/main/helper/core.py',
         'https://ghfast.top/https://raw.githubusercontent.com/{r}/main/helper/core.py',
+        'https://gh-proxy.com/https://raw.githubusercontent.com/{r}/main/helper/core.py',
+        'https://ghproxy.net/https://raw.githubusercontent.com/{r}/main/helper/core.py',
+        'https://fastly.jsdelivr.net/gh/{r}@main/helper/core.py',
         'https://cdn.jsdelivr.net/gh/{r}@main/helper/core.py']
 HOME = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'ashare_helper'); os.makedirs(HOME, exist_ok=True)
 CACHE = os.path.join(HOME, 'core_cache.py')
@@ -21,7 +24,7 @@ def fetch():
     for u in urls:
         try:
             req = urllib.request.Request(u + ('' if 'jsdelivr' in u else f'?t={int(time.time())}'), headers={'User-Agent': 'Mozilla/5.0'})
-            code = urllib.request.urlopen(req, timeout=15).read().decode('utf-8')
+            code = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
             if 'CORE_VERSION' in code and 'def main' in code:
                 open(CACHE, 'w', encoding='utf-8').write(code); print('已下载最新核心程序：', u.split('/')[2]); return code
         except Exception as e:

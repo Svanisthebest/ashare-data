@@ -15,14 +15,19 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 3
+CORE_VERSION = 4
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
+           'https://gh-proxy.com/https://raw.githubusercontent.com/{repo}/main/{path}',
+           'https://ghproxy.net/https://raw.githubusercontent.com/{repo}/main/{path}',
+           'https://fastly.jsdelivr.net/gh/{repo}@main/{path}',
            'https://cdn.jsdelivr.net/gh/{repo}@main/{path}']
+PLAN_CACHE = None   # 下面 HOME 定义后赋值
 HOME = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'ashare_helper')
 os.makedirs(HOME, exist_ok=True)
 STATE_F = os.path.join(HOME, 'state.json')
+PLAN_CACHE = os.path.join(HOME, 'plan_cache.json')
 UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://quote.eastmoney.com/'}
 MOCK = os.environ.get('ASH_MOCK')            # 测试用：本地仓库路径;YYYYMMDD（用当天日线模拟行情）
 LOCK = threading.RLock()
@@ -74,8 +79,8 @@ def repo_get(path):
     urls = ([S['mirror'].rstrip('/') + '/' + path] if S.get('mirror') else []) + [m.format(repo=REPO, path=path) for m in MIRRORS]
     err = []
     for u in urls:
-        try: return http_get(u + ('' if 'jsdelivr' in u else f'?t={int(time.time())}'), timeout=15, tries=1)
-        except Exception as e: err.append(f'{u[:40]}… {e}')
+        try: return http_get(u + ('' if 'jsdelivr' in u else f'?t={int(time.time())}'), timeout=8, tries=1)
+        except Exception as e: err.append(f"{u.split('/')[2]}：{str(e)[:60]}")
     raise RuntimeError('仓库读取失败：' + '；'.join(err))
 
 
@@ -154,13 +159,26 @@ def refresh_plan():
         cand = [r for r in csv.DictReader(io.StringIO(txt.lstrip('﻿')))]
         md = repo_get(latest['md'])
         with LOCK:
-            S['latest'] = latest; S['rules'] = rules; S['cand'] = cand; S['md'] = md; S['plan_err'] = None
+            S['latest'] = latest; S['rules'] = rules; S['cand'] = cand; S['md'] = md; S['plan_err'] = None; S['from_cache'] = False
             S['plan_loaded'] = f'{bj_now():%H:%M:%S}'
+        try: json.dump(dict(latest=latest, rules=rules, cand=cand, md=md), open(PLAN_CACHE, 'w', encoding='utf-8'), ensure_ascii=False)
+        except Exception: pass
         if rules.get('min_core', 1) > CORE_VERSION: log('规则需要更新版本的助手：请重启助手（会自动下载新版）')
         log(f"已读取计划 {latest['plan_date']}（规则 {rules.get('version')}，候选 {len(cand)} 只）")
     except Exception as e:
-        with LOCK: S['plan_err'] = str(e)
-        log(f'读取计划失败：{e}')
+        msg = str(e)
+        if S.get('from_cache') or (not S.get('rules') and load_cache()):
+            msg += f"（暂用本机上次保存的计划 {(S.get('latest') or {}).get('plan_date')}，确认日期对不对）"
+        with LOCK: S['plan_err'] = msg
+        log(f'读取计划失败：{msg}；会每 5 分钟自动重试，也可以在“设置”里换一个镜像')
+
+
+def load_cache():
+    try:
+        c = json.load(open(PLAN_CACHE, encoding='utf-8'))
+        with LOCK: S['latest'] = c['latest']; S['rules'] = c['rules']; S['cand'] = c['cand']; S['md'] = c['md']; S['from_cache'] = True
+        return True
+    except Exception: return False
 
 
 def plan_status():
@@ -211,7 +229,8 @@ def build_orders(red_override=None):
     for s in R['order']:
         for c in [x for x in cand if x['src'] == s]:
             code = c['代码']; nm = c['名称']; q = allq.get(code)
-            row = dict(src=s, route=R['names'].get(s, s), code=code, name=nm, note=c.get('说明', ''), action='不买', why='', price=None, limit=None, shares=0, amount=0)
+            row = dict(src=s, route=R['names'].get(s, s), code=code, name=nm, note=c.get('说明', ''), action='不买', why='', price=None, limit=None, shares=0, amount=0,
+                       pct=R['size'].get(s, 20), pct_amt=round(R['size'].get(s, 20) / 100 * equity) if equity else None)
             out.append(row)
             if s not in allowed: row['why'] = f'竞价 {gate_txt} 时这条路线不做'; continue
             if npos >= R['max_positions']: row['why'] = '已满 5 只'; continue
@@ -243,6 +262,7 @@ def build_orders(red_override=None):
             sh = int(val / px // 100 * 100)
             if sh < lot: row['action'] = '不买'; row['why'] = f'资金不够买 {lot} 股'; continue
             row['shares'] = sh; row['amount'] = round(sh * px, 2)
+            if val < R['size'].get(s, 20) / 100 * equity * 0.99: row['why'] += f'；可用资金不足，只买到约 {sh * px / equity:.0%} 仓位'
             try:
                 amt_yi = float(c.get('成交额亿') or 0)
                 if amt_yi > 0 and sh * px > 0.04 * amt_yi * 1e8: row['why'] += f'；⚠ 超过该股昨日成交额 4%（{amt_yi} 亿），分批买'
@@ -335,7 +355,7 @@ def scheduler():
     while True:
         try:
             now = bj_now(); today = now.strftime('%Y%m%d'); hm = now.strftime('%H%M'); wk = now.weekday() < 5
-            if time.time() - last_plan > (600 if '0900' <= hm <= '0930' else 3600): refresh_plan(); last_plan = time.time()
+            if time.time() - last_plan > (300 if S.get('plan_err') else 600 if '0900' <= hm <= '0930' else 3600): refresh_plan(); last_plan = time.time()
             if wk and '0925' <= hm < '0931' and S.get('orders_date') != today and (hm >= '0926' or now.second >= 15):
                 try: build_orders()
                 except Exception as e: log(f'自动生成开单单失败：{e}（可在页面手动填写红盘率后生成）'); S['orders_date'] = today + '_fail'
@@ -387,6 +407,16 @@ def api_post(path, body):
     elif path == '/api/keep':     # 按建议继续持有：保存多拿 / 推迟 / 高点状态
         r = next(x for x in (S.get('sells') or {}).get('rows', []) if x['code'] == body['code'])
         h = next(x for x in S['holdings'] if x['code'] == body['code']); h.update(r.get('set') or {}); r['done'] = True
+    elif path == '/api/edit_holding':   # 修改填错的持仓
+        h = next(x for x in S['holdings'] if x['code'] == body['orig'])
+        new = body['code'].strip()
+        if new != body['orig'] and any(x['code'] == new for x in S['holdings']): raise RuntimeError(f'持仓里已经有 {new}')
+        old_px = h['buy_price']
+        h.update(code=new, name=body.get('name', '').strip() or h['name'], src=body['src'], entry=body.get('entry') or h['entry'],
+                 buy_price=float(body['price']), shares=int(body['shares']))
+        if h.get('peak') in (None, old_px) or h['peak'] < h['buy_price']: h['peak'] = h['buy_price']
+        if 'extra' in body and body['extra'] != '': h['extra'] = int(body['extra'])
+        if 'delayed' in body: h['delayed'] = 1 if body['delayed'] in (1, True, '1', 'true', '是') else 0
     elif path == '/api/remove': S['holdings'] = [x for x in S['holdings'] if x['code'] != body['code']]
     save_state(); return {'ok': True}
 
@@ -432,7 +462,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖）</h2><div id="brk" class="mute">无</div></div>
 <div class="card"><h2>③ 14:47 卖出检查（自动，也可手动）</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
 <div class="card"><h2>持仓（只存在本机）</h2><div id="hold"></div>
-<div class="row" style="margin-top:8px">手动添加：代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="9" placeholder="YYYYMMDD"><button onclick="addh()">添加</button></div></div>
+<div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="9" placeholder="YYYYMMDD"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
 <div class="card"><h2>今日计划候选</h2><div id="cand"></div></div>
 <div class="card"><h2>计划全文</h2><pre id="md"></pre></div>
 <div class="card"><h2>设置与日志</h2><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
@@ -443,7 +473,14 @@ function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;
 async function post(p,b={}){const r=await (await fetch(p,{method:'POST',body:JSON.stringify(b)})).json();if(!r.ok)alert(r.err);load()}
 function beep(){try{const a=new AudioContext(),o=a.createOscillator();o.connect(a.destination);o.frequency.value=880;o.start();setTimeout(()=>o.stop(),400)}catch(e){}}
 function notify(t){beep();document.title='【新】'+t;if(window.Notification){if(Notification.permission==='granted')new Notification(t);else Notification.requestPermission()}}
-function addh(){post('/api/add_holding',{code:val('hc'),name:val('hn'),src:val('hs'),price:val('hp'),shares:val('hq'),entry:val('he')})}
+let editing=null;
+function addh(){const b={code:val('hc'),name:val('hn'),src:val('hs'),price:val('hp'),shares:val('hq'),entry:val('he')};
+ if(!b.code||!b.price||!b.shares){alert('代码、买入价、股数都要填');return}
+ if(editing){b.orig=editing;b.extra=val('hxe');b.delayed=val('hxd');post('/api/edit_holding',b);endedit()}else post('/api/add_holding',b)}
+function edith(c){const h=st.holdings.find(x=>x.code===c);if(!h)return;editing=c;
+ $('hc').value=h.code;$('hn').value=h.name||'';$('hs').value=h.src;$('hp').value=h.buy_price;$('hq').value=h.shares;$('he').value=h.entry;$('hxe').value=h.extra||0;$('hxd').value=h.delayed?'1':'0';
+ $('hmode').textContent='修改 '+c+'：';$('hb').textContent='保存修改';$('hx').style.display='';$('hcan').style.display='';$('hc').focus()}
+function endedit(){editing=null;['hc','hn','hp','hq','he'].forEach(i=>$(i).value='');$('hmode').textContent='手动添加：';$('hb').textContent='添加';$('hx').style.display='none';$('hcan').style.display='none'}
 function tbl(h,rows){return '<table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+rows.join('')+'</table>'}
 async function load(){st=await (await fetch('/api/state')).json();
 $('hd').textContent=`北京时间 ${st.now} ｜ 规则 ${st.rules_version||'?'} ｜ ${st.plan_status}${st.plan_err?' ｜ ⚠ '+st.plan_err:''}`;
@@ -451,7 +488,7 @@ if(document.activeElement!==$('eq'))$('eq').value=st.equity||'';if(document.acti
 $('acct').textContent=`持仓 ${st.holdings.length} / 5 只；数据目录 ${st.home}`;
 if(!$('hs').options.length)for(const k in st.names){const o=document.createElement('option');o.value=k;o.textContent=st.names[k];$('hs').appendChild(o)}
 const O=st.orders;if(O){$('gate').innerHTML=` <span class="big">${(O.red*100).toFixed(1)}%</span>（${O.red_src}，${esc(O.time)}）→ 竞价 ${O.gate}，可做：${O.allowed.join('、')}`;
-$('orders').innerHTML=tbl(['路线','代码','名称','竞价价','竞价涨跌','动作','股数','金额','说明',''],O.rows.map(r=>`<tr><td>${esc(r.route)}</td><td>${r.code}</td><td>${esc(r.name)}</td><td>${r.price??''}</td><td>${r.gap!=null?r.gap+'%':''}</td><td class="${r.action!=='不买'?'buy':'mute'}">${r.action}${r.limit&&r.action!=='不买'?' '+r.limit:''}</td><td>${r.shares||''}</td><td>${r.amount||''}</td><td>${esc(r.why)}</td><td>${r.action!=='不买'&&!r.done?`<button onclick="bought('${r.code}',${r.limit},${r.shares})">已成交</button>`:(r.done?'已记入':'')}</td></tr>`))+`<p class="mute">开单后剩余可用约 ${O.cash_left} 元</p>`;
+$('orders').innerHTML=tbl(['路线','代码','名称','竞价价','竞价涨跌','动作','建议仓位','股数','金额','说明',''],O.rows.map(r=>`<tr><td>${esc(r.route)}</td><td>${r.code}</td><td>${esc(r.name)}</td><td>${r.price??''}</td><td>${r.gap!=null?r.gap+'%':''}</td><td class="${r.action!=='不买'?'buy':'mute'}">${r.action}${r.limit&&r.action!=='不买'?' '+r.limit:''}</td><td>${r.pct!=null?r.pct+'%'+(r.pct_amt?'<br><span class="mute">约 '+r.pct_amt+' 元</span>':''):''}</td><td>${r.shares||''}</td><td>${r.amount||''}</td><td>${esc(r.why)}</td><td>${r.action!=='不买'&&!r.done?`<button onclick="bought('${r.code}',${r.limit},${r.shares})">已成交</button>`:(r.done?'已记入':'')}</td></tr>`))+`<p class="mute">开单后剩余可用约 ${O.cash_left} 元</p>`;
 if(O.time!==seenO&&seenO!==''){notify('开单单已生成')}seenO=O.time}
 const K=st.k_watch||[];$('kw').innerHTML=K.length?tbl(['代码','名称','挂单价','最低','现价',''],K.map(k=>`<tr><td>${k.code}</td><td>${esc(k.name)}</td><td>${k.limit}</td><td>${k.low}</td><td>${k.price}</td><td class="${k.hit?'buy':'mute'}">${k.hit?'最低价已到挂单价，去券商确认是否成交':'未到'}</td></tr>`)):'无';
 const BR=st.breaks||[];$('brk').innerHTML=BR.length?tbl(['时间','代码','名称','路线','涨停价','现价','盈亏',''],BR.map(a=>`<tr><td>${a.time}</td><td>${a.code}</td><td>${esc(a.name)}</td><td>${esc(a.route)}</td><td>${a.up}</td><td>${a.price}</td><td>${a.pnl}%</td><td class="sell">立即卖出 <button onclick="sold('${a.code}',${a.price})">已卖出</button></td></tr>`)):'无';
@@ -459,8 +496,8 @@ if(BR.length>seenB&&seenB>=0){notify('持仓炸板，按规则卖出')}seenB=BR.
 const X=st.sells;if(X){$('zz').textContent=`（${X.time}，中证1000 ${X.zz1000??''}%）`;
 $('sells').innerHTML=tbl(['代码','名称','路线','买入价','现价','今日','盈亏','天数','建议','原因',''],X.rows.map(r=>`<tr><td>${r.code}</td><td>${esc(r.name)}</td><td>${esc(r.route)}</td><td>${r.buy}</td><td>${r.price??''}</td><td>${r.ret!=null?r.ret+'%':''}</td><td>${r.pnl!=null?r.pnl+'%':''}</td><td>${r.days??''}</td><td class="${r.action==='卖出'?'sell':'warn'}">${r.action}</td><td>${esc(r.why)}</td><td>${r.action==='卖出'?`<button onclick="sold('${r.code}',${r.price})">已卖出</button>`:(r.action!=='?'&&!r.done&&r.set?`<button class="ghost" onclick="post('/api/keep',{code:'${r.code}'})">按建议记录</button>`:'')}</td></tr>`));
 if(X.time!==seenS&&seenS!==''){notify('卖出检查已完成')}seenS=X.time}
-$('hold').innerHTML=st.holdings.length?tbl(['代码','名称','路线','买入日','买入价','股数','多拿','已推迟',''],st.holdings.map(h=>`<tr><td>${h.code}</td><td>${esc(h.name)}</td><td>${esc(st.names[h.src]||h.src)}</td><td>${h.entry}</td><td>${h.buy_price}</td><td>${h.shares}</td><td>${h.extra||0}</td><td>${h.delayed?'是':''}</td><td><button class="ghost" onclick="sold('${h.code}','')">已卖出</button> <button class="ghost" onclick="if(confirm('删除这条持仓记录？'))post('/api/remove',{code:'${h.code}'})">删除</button></td></tr>`)):'<span class="mute">空仓</span>';
-$('cand').innerHTML=st.cand.length?tbl(['路线','代码','名称','收盘','涨跌%','成交额亿','说明'],st.cand.map(c=>`<tr><td>${esc(c['路线'])}</td><td>${c['代码']}</td><td>${esc(c['名称'])}</td><td>${c['收盘']}</td><td>${c['涨跌']}</td><td>${c['成交额亿']}</td><td>${esc(c['说明'])}</td></tr>`)):'无候选';
+$('hold').innerHTML=st.holdings.length?tbl(['代码','名称','路线','买入日','买入价','股数','多拿','已推迟',''],st.holdings.map(h=>`<tr><td>${h.code}</td><td>${esc(h.name)}</td><td>${esc(st.names[h.src]||h.src)}</td><td>${h.entry}</td><td>${h.buy_price}</td><td>${h.shares}</td><td>${h.extra||0}</td><td>${h.delayed?'是':''}</td><td><button class="ghost" onclick="edith('${h.code}')">修改</button> <button class="ghost" onclick="sold('${h.code}','')">已卖出</button> <button class="ghost" onclick="if(confirm('删除这条持仓记录？'))post('/api/remove',{code:'${h.code}'})">删除</button></td></tr>`)):'<span class="mute">空仓</span>';
+$('cand').innerHTML=st.cand.length?tbl(['路线','建议仓位','代码','名称','收盘','涨跌%','成交额亿','说明'],st.cand.map(c=>`<tr><td>${esc(c['路线'])}</td><td>${st.size[c.src]!=null?st.size[c.src]+'%':''}</td><td>${c['代码']}</td><td>${esc(c['名称'])}</td><td>${c['收盘']}</td><td>${c['涨跌']}</td><td>${c['成交额亿']}</td><td>${esc(c['说明'])}</td></tr>`)):'无候选';
 $('md').textContent=st.md||'';$('log').textContent=st.log.slice().reverse().join('\n')}
 function bought(c,p,q){const px=prompt('实际成交价',p),n=prompt('实际成交股数',q);if(px&&n)post('/api/bought',{code:c,price:px,shares:n})}
 function sold(c,p){const px=prompt('实际卖出价（可留空）',p||'');if(px!==null)post('/api/sold',{code:c,price:px})}
@@ -470,7 +507,7 @@ if(window.Notification&&Notification.permission==='default')Notification.request
 
 def main():
     log(f'助手核心 v{CORE_VERSION} 启动，数据目录 {HOME}')
-    refresh_plan()
+    if load_cache(): log(f"先显示本机上次保存的计划 {S['latest'].get('plan_date')}，正在读取最新计划…")
     threading.Thread(target=scheduler, daemon=True).start()
     for port in range(8765, 8775):
         try: srv = ThreadingHTTPServer(('127.0.0.1', port), H); break
