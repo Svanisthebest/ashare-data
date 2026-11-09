@@ -5,16 +5,22 @@ on:
     branches: [main]
     paths: ['helper/core.py', 'data/helper/**']
   workflow_dispatch:
-  workflow_call:
 jobs:
   purge:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - run: |
+          want=$(grep -m1 "^CORE_VERSION" helper/core.py); echo "仓库里：$want"
+          # raw.githubusercontent 自己也有约 5 分钟缓存，等它先更新，否则 jsDelivr 会重新抓到旧文件
+          for i in $(seq 1 40); do
+            got=$(curl -s "https://raw.githubusercontent.com/${{ github.repository }}/main/helper/core.py?t=$(date +%s%N)" | grep -m1 "^CORE_VERSION")
+            [ "$got" = "$want" ] && cmp -s <(curl -s "https://raw.githubusercontent.com/${{ github.repository }}/main/data/helper/latest.json?t=$(date +%s%N)") data/helper/latest.json && break
+            sleep 15
+          done
+          echo "raw：$got"
           for p in helper/core.py data/helper/latest.json data/helper/rules.json; do
-            curl -s "https://purge.jsdelivr.net/gh/Svanisthebest/ashare-data@main/$p"; echo
+            curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$p" | grep -E '"status"|throttled' | head -2
           done
           sleep 20
-          curl -s https://cdn.jsdelivr.net/gh/Svanisthebest/ashare-data@main/helper/core.py | grep -m1 "^CORE_VERSION"
-          curl -s https://fastly.jsdelivr.net/gh/Svanisthebest/ashare-data@main/helper/core.py | grep -m1 "^CORE_VERSION"
-          curl -s "https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main/helper/core.py?t=$(date +%s)" | grep -m1 "^CORE_VERSION" || echo ghfast 不通
+          for h in cdn fastly; do echo "$h：$(curl -s https://$h.jsdelivr.net/gh/${{ github.repository }}@main/helper/core.py | grep -m1 '^CORE_VERSION')"; done
