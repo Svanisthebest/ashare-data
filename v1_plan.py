@@ -273,8 +273,9 @@ def main():
     if above5 and monday:
         for code, r in cc.iterrows(): add('M', code, '只在周一竞价红盘 40–55% 时做', 0)
     # 低位启动
-    for i, (code, r) in enumerate(td[td.ret.between(0.05, 0.095) & (td.pos120 < 0.10)].sort_values('pos120').iterrows()):
-        add('D', code, '首选' if i < 3 else '备选', i)
+    # 排序（R161）：按当天成交额从大到小。原来按 120 日位置从低到高，回测不比随机好；成交额大的略好、也更容易按价成交
+    for i, (code, r) in enumerate(td[td.ret.between(0.05, 0.095) & (td.pos120 < 0.10)].sort_values('amount', ascending=False).iterrows()):
+        add('D', code, '首选（成交额最大）' if i < 3 else '备选', i)
     P = pd.DataFrame(C)
     # 板块量能提示（不改变开单规则）
     BV = board_volume(a.out, D, list(P['代码'].unique())) if len(P) else {}
