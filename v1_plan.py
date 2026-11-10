@@ -93,6 +93,61 @@ def sealed_minutes(codes, D, ups):
     return res, miss
 
 
+BAD_BOARD = r'百元|昨日|连板|涨停|炸板|触板|首板|多板|融资融券|沪股通|深股通|标准普尔|富时|MSCI|重仓|增仓|减仓|新进|持股|破净|破发|破增发|低市|高市盈|低价|价值|成长|风格|大盘|中盘|小盘|微盘|微利|权重|股权|举牌|增持|中证|深成|上证|HS300|深证100|央视50|创业板综|连续亏损|中报|季报|年报|预增|预减|扭亏|首亏|ST|摘帽|题材股|趋势股|反转股|超跌|新高|热股|行业龙头|周期股|红利|茅指数|宁组合|转债|GDR|AB股|AH股|B股|北交所|做市|IPO受益|金股|贬值受益|养老金|近期|参股|改革|特区|长江三角|西部大开发|京津冀|一带一路|东北振兴|滨海新区|自贸|新材料|高端装备|节能环保|^新能源$|先进制造|数字经济|新零售|新消费|独角兽|中字头|稀缺资源|军民融合|智慧城市|大数据|创投|AI应用|人工智能'
+
+
+def board_volume(root, D, codes):
+    """每只候选所属最强板块（当天涨幅最大的题材/行业板块）今天的量能：板块成交额 / 前 5 日均额、板块近 20 日涨幅。
+    只是提示，不是开单条件。研究（R160）：板块量比 ≥1.8 或 高位（20 日涨 >15%）再放量 ≥1.5 时，次日买入的结果明显变差（近两年）。
+    板块日线用 data/theme/board_kline.csv.gz（到上一交易日），今天的涨幅和成交额现取东方财富板块列表；取不到就返回空。"""
+    try:
+        import requests
+        tp = os.path.join(root, 'theme')
+        K = pd.read_csv(os.path.join(tp, 'board_kline.csv.gz'), dtype={'bk': str, 'date': str})[['bk', 'date', 'close', 'amount', 'pct']]
+        M = pd.read_csv(os.path.join(tp, 'members.csv.gz'), dtype=str)[['bk', 'code', 'board_name']]
+        M = M[~M.board_name.astype(str).str.contains(BAD_BOARD)]
+        M = M[M.bk.map(M.groupby('bk').size()) >= 5]          # 与研究一致：成分股不足 5 只的小板块不用
+        d = f'{D[:4]}-{D[4:6]}-{D[6:]}'
+        K = K[K.date <= d]
+        if K.date.max() < d:                         # 板块日线还没更新到今天：取当天快照补一行
+            S = requests.Session(); S.headers.update({'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com/'})
+            rows = []
+            for fs in ['m:90 t:3 f:!50', 'm:90 t:2 f:!50']:
+                pn = 1
+                while pn < 20:
+                    j = None
+                    for host in ['https://push2.eastmoney.com', 'https://29.push2.eastmoney.com', 'https://82.push2.eastmoney.com']:
+                        try:
+                            j = S.get(host + '/api/qt/clist/get', params=dict(pn=pn, pz=100, po=1, np=1, ut='bd1d9ddb04089700cf9c27f6f7426281', fltt=2, invt=2,
+                                                                             fid='f3', fs=fs, fields='f12,f3,f6'), timeout=15).json(); break
+                        except Exception: time.sleep(1)
+                    diff = ((j or {}).get('data') or {}).get('diff') or []
+                    rows += diff
+                    if not diff or len(diff) < 100: break
+                    pn += 1
+            T = pd.DataFrame([dict(bk=r['f12'], pct=r['f3'], amount=r['f6']) for r in rows if r.get('f3') not in ('-', None) and r.get('f6') not in ('-', None)])
+            if len(T) < 100: return {}
+            last = K.sort_values('date').groupby('bk').close.last()
+            T['date'] = d; T['close'] = T.bk.map(last) * (1 + T.pct.astype(float) / 100)
+            K = pd.concat([K, T.dropna(subset=['close'])], ignore_index=True)
+        for c in ['close', 'amount', 'pct']: K[c] = pd.to_numeric(K[c], errors='coerce')
+        K = K.sort_values(['bk', 'date']); g = K.groupby('bk')
+        K['vr'] = K.amount / g.amount.transform(lambda s: s.rolling(5, min_periods=3).mean().shift(1))
+        K['r20'] = g.close.transform(lambda s: s / s.shift(20) - 1)
+        t = K[K.date == d].drop_duplicates('bk').set_index('bk')
+        out = {}
+        for code in codes:
+            bs = [b for b in set(M.bk[M.code == code]) if b in t.index and pd.notna(t.at[b, 'vr'])]
+            if not bs: continue
+            x = t.loc[bs]; b = x.pct.idxmax(); y = x.loc[b]
+            nm = M.board_name[M.bk == b].iloc[0]; r20 = float(y.r20) if pd.notna(y.r20) else 0.0
+            warn = '⚠板块爆量' if y.vr >= 1.8 else ('⚠板块高位放量' if (r20 > 0.15 and y.vr >= 1.5) else '')
+            out[code] = dict(板块=nm, 板块涨幅=round(float(y.pct), 1), 板块量比=round(float(y.vr), 2), 板块20日=round(r20 * 100, 1), 板块提示=warn)
+        return out
+    except Exception as e:
+        print('板块量能未取到：', e); return {}
+
+
 def write_helper_files(out, D):
     """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
     import json
@@ -221,12 +276,19 @@ def main():
     for i, (code, r) in enumerate(td[td.ret.between(0.05, 0.095) & (td.pos120 < 0.10)].sort_values('pos120').iterrows()):
         add('D', code, '首选' if i < 3 else '备选', i)
     P = pd.DataFrame(C)
+    # 板块量能提示（不改变开单规则）
+    BV = board_volume(a.out, D, list(P['代码'].unique())) if len(P) else {}
+    if len(P):
+        for col in ['板块', '板块涨幅', '板块量比', '板块20日', '板块提示']: P[col] = P['代码'].map(lambda c: BV.get(c, {}).get(col))
+        P['说明'] = [f"{w}【{BV[c]['板块']} 今天量比 {BV[c]['板块量比']}、20日 {BV[c]['板块20日']:+.0f}%：{BV[c]['板块提示'][1:]}，次日容易分歧，可少买或不买】" + ' ' + str(x) if c in BV and BV[c]['板块提示'] else x
+                       for c, x, w in zip(P['代码'], P['说明'], ['⚠'] * len(P))]
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
     # 写计划
     L = [f'# v1.5 计划：{d} 收盘 → {nxt}', '',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
          f'- 量能：{vol_txt}。大票缩量上涨一般走不远，明显放量的上涨才有延续性（仅供参考）。',
+         '- 板块量能：候选表里的「所属板块（量比）」是该股当天最强板块的成交额 ÷ 前 5 日均额。量比 ≥1.8，或板块 20 日已涨 >15% 且量比 ≥1.5，会标 ⚠：板块爆量多是情绪高潮，次日容易分歧，可少买或不买（提示，不是规则）。',
          f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；{y_note}；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
          '## 9:25 竞价决定动作', '',
          '| 全A竞价红盘率 | 可做的路线 |', '|---|---|',
@@ -238,8 +300,8 @@ def main():
         x = P[P.src == src].sort_values('rk') if len(P) else P
         L.append(f'## {NAME[src]}（每笔 {SIZE[src]}%{"，最多 " + str(CAP[src]) + " 只" if src in CAP else ""}）')
         if not len(x): L += ['', '无候选。', '']; continue
-        L += ['', '| 代码 | 名称 | 收盘 | 涨跌% | 成交额亿 | 位置% | 说明 |', '|---|---|---|---|---|---|---|']
-        L += [f"| {r['代码']} | {r['名称']} | {r['收盘']:.2f} | {r['涨跌']} | {r['成交额亿']} | {r['位置120']} | {r['说明']} |" for _, r in x.head(10).iterrows()]
+        L += ['', '| 代码 | 名称 | 收盘 | 涨跌% | 成交额亿 | 位置% | 所属板块（量比） | 说明 |', '|---|---|---|---|---|---|---|---|']
+        L += [f"| {r['代码']} | {r['名称']} | {r['收盘']:.2f} | {r['涨跌']} | {r['成交额亿']} | {r['位置120']} | {(str(r['板块']) + ' ' + str(r['板块量比'])) if pd.notna(r.get('板块')) else '—'} | {r['说明']} |" for _, r in x.head(10).iterrows()]
         L.append('')
     L += ['## 卖出', '', '- 恐慌低吸从高点回撤 10% 卖，收盘亏 15% 止损，最多拿 20 天。',
           '- 其他路线：买入后第一个可卖日起，10:30 以后盘中冲到涨停又打开（5 分钟收在涨停价下方）就立即卖；其余不涨停就尾盘卖；总龙头首阴当天涨 ≥ 7%（20cm ≥ 14%）也可多拿，最多 3 天；收盘亏 8% 止损；最多拿 11 天。',
