@@ -32,13 +32,14 @@ def main():
     ap.add_argument("--start", default="2022-01-01")
     ap.add_argument("--end", default=pd.Timestamp.now(tz="Asia/Shanghai").strftime("%Y-%m-%d"))
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--codes", default="turn_codes.csv"); ap.add_argument("--prefix", default="turn")
     a = ap.parse_args()
     import baostock as bs
     bs.login()
-    codes = pd.read_csv("turn_codes.csv").code.tolist()[a.shard::a.nshards]
+    codes = pd.read_csv(a.codes).code.tolist()[a.shard::a.nshards]
     if a.limit: codes = codes[:a.limit]
     repo = os.environ.get("GITHUB_REPOSITORY"); tag = f"{a.shard:02d}of{a.nshards:02d}"
-    os.makedirs("out", exist_ok=True); f = f"out/turn_{tag}.csv.gz"; pf = f"out/turn_progress_{tag}.json"
+    os.makedirs("out", exist_ok=True); f = f"out/{a.prefix}_{tag}.csv.gz"; pf = f"out/{a.prefix}_progress_{tag}.json"
     up = lambda *fs: repo and subprocess.run(["gh", "release", "upload", "turnover", *fs, "--clobber", "-R", repo], check=False)
     if repo:
         subprocess.run(["gh", "release", "download", "turnover", "-R", repo, "-p", os.path.basename(f), "-D", "out", "--clobber"], check=False)

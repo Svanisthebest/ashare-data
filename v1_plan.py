@@ -159,6 +159,11 @@ def main():
     zy = tdall[tdall.index.isin(pv[pv.zt].index) & ~yz]
     prem = float(zy.ret.mean()) if len(zy) else 0.0
     fh, above5, zr = index_state(a.out, D)
+    # 大盘量能：全市场（不含 ST）成交额 / 前 5 日均额、5 日均量 / 20 日均量（盘前参考，不是开单条件）
+    tot = df[~df.st].groupby('date').amount.sum().sort_index()
+    v5 = float(tot.iloc[-1] / tot.iloc[-6:-1].mean()) if len(tot) >= 6 else float('nan')
+    v520 = float(tot.iloc[-5:].mean() / tot.iloc[-20:].mean()) if len(tot) >= 20 else float('nan')
+    vol_txt = f"大盘成交额 {tot.iloc[-1] / 1e8:,.0f} 亿，是前 5 日均额的 {v5:.0%}（{'明显放量' if v5 >= 1.2 else '放量' if v5 >= 1.05 else '平量' if v5 >= 0.95 else '缩量' if v5 >= 0.85 else '明显缩量'}），5 日均量是 20 日均量的 {v520:.0%}"
     nxt = '下一交易日'; monday = pd.Timestamp(d).weekday() == 4   # 周一放宽：信号日为周五
     C = []
     def add(src, code, why, rk):
@@ -221,6 +226,7 @@ def main():
     # 写计划
     L = [f'# v1.5 计划：{d} 收盘 → {nxt}', '',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
+         f'- 量能：{vol_txt}。大票缩量上涨一般走不远，明显放量的上涨才有延续性（仅供参考）。',
          f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；{y_note}；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
          '## 9:25 竞价决定动作', '',
          '| 全A竞价红盘率 | 可做的路线 |', '|---|---|',

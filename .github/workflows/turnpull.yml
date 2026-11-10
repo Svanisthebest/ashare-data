@@ -9,6 +9,14 @@ on:
       limit:
         description: "每片只拉前N只（0=全部）"
         default: "0"
+      start:
+        default: "2022-01-01"
+      end:
+        default: ""
+      codes:
+        default: "turn_codes.csv"
+      prefix:
+        default: "turn"
 
 permissions:
   contents: write
@@ -39,10 +47,11 @@ jobs:
           sparse-checkout: |
             turn_pull.py
             turn_codes.csv
+            turn_codes_hist.csv
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: pip install pandas baostock
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: python turn_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --limit ${{ github.event.inputs.limit }}
+        run: python turn_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }} --limit ${{ github.event.inputs.limit }} --start ${{ github.event.inputs.start }} --codes ${{ github.event.inputs.codes }} --prefix ${{ github.event.inputs.prefix }} ${{ github.event.inputs.end != '' && format('--end {0}', github.event.inputs.end) || '' }}
