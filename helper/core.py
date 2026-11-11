@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 10
+CORE_VERSION = 11
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -382,7 +382,7 @@ def build_sells():
             else: r.update(action='持有', why=f'恐慌低吸：高点 {peak:.2f}，跌破 {peak * 0.9:.2f} 再卖', set=dict(peak=peak))
             continue
         if pnl < -sl.get('stop', 0.08):
-            lp = max(math.floor(p * 0.98 * 100) / 100, round(dn + 0.01, 2)); r.update(action='卖出', limit=lp, why=f'亏 {pnl:.1%}，超过 8% 止损；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出'); continue
+            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn + 0.01, 2)); r.update(action='卖出', limit=lp, why=f'亏 {pnl:.1%}，超过 8% 止损；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出'); continue
         if zt: act, why, st = '持有', '涨停，继续拿', {}
         elif s == 'LD' and ret >= sl.get('LD_extra_ratio', 0.7) * lim and h.get('extra', 0) < sl.get('LD_extra_max', 3):
             act, why, st = '持有', f'总龙头首阴涨 {ret:.1%}（≥ 涨停幅 70%），多拿一天（第 {h.get("extra", 0) + 1} 次）', dict(extra=h.get('extra', 0) + 1)
@@ -393,7 +393,7 @@ def build_sells():
         else: act, why, st = '卖出', '没涨停，尾盘卖', {}
         if act != '卖出' and n >= sl.get('max_days', 11): act, why, st = '卖出', f'已拿 {n} 天，到期', {}
         if act == '卖出':
-            lp = max(math.floor(p * 0.98 * 100) / 100, round(dn + 0.01, 2))
+            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn + 0.01, 2))
             r['limit'] = lp; why += f'；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出（按收盘价成交）'
         r.update(action=act, why=why, set=st)
     with LOCK:
