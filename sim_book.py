@@ -124,6 +124,7 @@ def main():
             elif p['src'] not in ('RB', 'B') and not zt:
                 if p['src'] == 'LD' and dr >= 0.7 * L and p['extra'] < 3: p['extra'] += 1
                 elif cl < p['ep'] and zr <= -0.01 and not p.get('delayed'): p['delayed'] = 1; p['note'] = '亏损且中证1000 跌 ≥ 1%，推迟一天卖'
+                elif p['src'] != 'LD' and L < 0.15 and dr >= 0.7 * L and p['extra'] < 1: p['extra'] += 1; p['note'] = f'10cm 涨 {dr:.1%} 没封，多拿一天'   # v1.5.1
                 else: why = '没涨停，尾盘卖'
             if why is None and p['src'] not in ('RB', 'B') and p['held'] >= 11: why = '拿满 11 天'
         if why:
@@ -154,7 +155,8 @@ def main():
     if book['pos']:
         L_ += ['| 路线 | 名称 | 买入日 | 买入价 | 今收 | 浮动 | 下一步 |', '|---|---|---|---|---|---|---|']
         for p in book['pos']:
-            nxt = '亏损且中证1000 跌 ≥ 1%，推迟到明天尾盘卖' if p.pop('note', None) else f"拿满 5 天（已 {p['held']} 天）" if p['src'] == 'RB' else ('高点回撤 10% 卖' if p['src'] == 'B' else ('明天不涨停且涨不到 7%（20cm 14%）就尾盘卖' if p['src'] == 'LD' else '明天不涨停就尾盘卖'))
+            note_ = p.pop('note', None)
+            nxt = (note_ + '，明天不涨停就尾盘卖') if note_ and note_.startswith('10cm') else '亏损且中证1000 跌 ≥ 1%，推迟到明天尾盘卖' if note_ else f"拿满 5 天（已 {p['held']} 天）" if p['src'] == 'RB' else ('高点回撤 10% 卖' if p['src'] == 'B' else ('明天不涨停且涨不到 7%（20cm 14%）就尾盘卖' if p['src'] == 'LD' else '明天不涨停就尾盘卖'))
             L_.append(f"| {NAME[p['src']]} | {p['name']} | {p['entry']} | {p['ep']:.2f} | {p['last']:.2f} | {p['last'] / p['ep'] - 1:+.1%} | {nxt} |")
     else: L_.append('- 空仓')
     L_ += ['', f'明天开仓前先扣掉以上持仓：已占 {len(book["pos"])} / 5 个仓位。']

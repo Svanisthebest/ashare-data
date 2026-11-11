@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 9
+CORE_VERSION = 10
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -388,6 +388,8 @@ def build_sells():
             act, why, st = '持有', f'总龙头首阴涨 {ret:.1%}（≥ 涨停幅 70%），多拿一天（第 {h.get("extra", 0) + 1} 次）', dict(extra=h.get('extra', 0) + 1)
         elif p < h['buy_price'] and zr <= sl.get('delay_index_drop', -0.01) and not h.get('delayed'):
             act, why, st = '推迟', f'亏损且中证1000 {zr:+.2%}（≤ −1%），推迟到明天尾盘卖（只推迟一次）', dict(delayed=1)
+        elif s != 'LD' and lim < 0.15 and ret >= sl.get('extra_all_ratio', 0.7) * lim and h.get('extra', 0) < sl.get('extra_all_max', 1) and sl.get('extra_all_max', 0):
+            act, why, st = '持有', f'10cm 涨 {ret:.1%}（≥ 7%）没封，多拿一天', dict(extra=h.get('extra', 0) + 1)
         else: act, why, st = '卖出', '没涨停，尾盘卖', {}
         if act != '卖出' and n >= sl.get('max_days', 11): act, why, st = '卖出', f'已拿 {n} 天，到期', {}
         if act == '卖出':
