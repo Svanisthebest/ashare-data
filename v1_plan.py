@@ -151,7 +151,7 @@ def write_helper_files(out, D):
     """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
     import json
     hp = os.path.join(out, 'helper'); os.makedirs(hp, exist_ok=True)
-    rules = dict(version='v1.5', min_core=6, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
+    rules = dict(version='v1.5', min_core=7, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
                  gate=dict(high=0.55, low=0.40,
                            allowed_high=[s for s in ORDER if s not in ('K', 'M')],
                            allowed_mid=['LD', 'K', 'N', 'P', 'Q', 'M', 'Y'],
@@ -163,9 +163,9 @@ def write_helper_files(out, D):
                         'K': dict(type='limit_from_open', min_gap=-0.03, max_gap=0.0, limit_mult=0.97),
                         'Y': dict(type='open', min_gap=0.03, auc_ratio=[0.03, 0.10])},
                  sell=dict(stop=0.08, stop_B=0.15, B_trail=0.10, B_max_days=20, max_days=11,
-                           LD_extra_ratio=0.7, LD_extra_max=3, delay_index_drop=-0.01, delay_once=True, break_after='10:30', break_exempt=['B']),
+                           LD_extra_ratio=0.7, LD_extra_max=3, delay_index_drop=-0.01, delay_once=True, break_after='10:30', break_exempt=['B'], check_time='14:55', order='closing_auction'),
                  notes=['Y（炸板弱转强）：竞价高开 ≥3% 且 竞价成交额是近 5 日平均成交额的 3%–10% 才开盘买；N、P、Q 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
-                        '卖出：10:30 后冲到涨停又打开就立即卖；其余不涨停就 14:50 尾盘卖；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天'])
+                        '卖出：10:30 后冲到涨停又打开就立即卖；其余 14:55 判定、不涨停就在 14:57–15:00 收盘集合竞价卖（按收盘价成交）；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天'])
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
     import hashlib
     h = lambda f: hashlib.sha256(open(f, 'rb').read()).hexdigest()[:16] if os.path.exists(f) else None
@@ -309,8 +309,8 @@ def main():
         L.append('')
     L += ['## 卖出', '', '- 恐慌低吸从高点回撤 10% 卖，收盘亏 15% 止损，最多拿 20 天。',
           '- 其他路线：买入后第一个可卖日起，10:30 以后盘中冲到涨停又打开（5 分钟收在涨停价下方）就立即卖；其余不涨停就尾盘卖；总龙头首阴当天涨 ≥ 7%（20cm ≥ 14%）也可多拿，最多 3 天；收盘亏 8% 止损；最多拿 11 天。',
-          '- v1.1：到了该卖的那天，14:50 若持仓亏损且中证1000 当天跌 ≥ 1%，推迟一天再卖（只推迟一次；收盘亏 8% 仍止损）。',
-          '- 14:50 前挂尾盘卖单；封死跌停卖不出就次日开盘卖；不用盘中止损单。', '',
+          '- v1.1：到了该卖的那天，14:55 若持仓亏损且中证1000 当天跌 ≥ 1%，推迟一天再卖（只推迟一次；亏 8% 仍止损）。',
+          '- 尾盘卖：14:55 看价格和中证1000 判定（开单工具 14:55 自动检查），要卖的在 14:57–15:00 收盘集合竞价挂比现价低约 2% 的限价单，按收盘价成交。回测显示 14:45 就判定会少赚不少（尾盘才封板的票会被卖掉）。封死跌停卖不出就次日开盘卖；不用盘中止损单。', '',
           '## 执行', '', '- 9:25 竞价确认后开盘买：9:25–9:30 挂「竞价价 +0.5%」限价单；9:30 没成交最多改到竞价价 +1%，再高就不买（晚买平均多付 1% 以上，回测收益会明显下降）。2板龙头挂单价不超过昨收 +2%，低开路线不超过昨收；缩量断板低开、首板强势未封低开、2板断板强收只在开盘价低于昨收、且不低于昨收 −5% 时买，平开或高开不买。',
           '- 炸板弱转强（v1.5）：竞价高开 ≥3%（不是涨停价）且竞价成交额在说明里给出的区间（近 5 日平均成交额的 3%–10%）才买，按竞价价 +0.5% 挂单。量太小是诱多、太大是出货，都不买。约三分之一买完当天会被砸，属于这条路线的正常情况，按卖出规则处理即可。',
           '- 高标被砸：开盘在昨收 −3% 到 0 之间时，开盘后挂「开盘价 × 0.97」限价买单，收盘前没成交就撤单（不追）。',

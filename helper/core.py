@@ -6,7 +6,7 @@ A股短线开单助手（核心程序）。由 launcher.py 启动时从仓库下
 功能：
   - 9:25 抓全市场竞价价，算全A竞价红盘率 → 竞价开关 → 按排队顺序、仓位、入场条件生成开单单（股数、挂单价）
   - 盘中盯高标被砸挂单是否可能成交
-  - 14:47 起逐只检查持仓：涨停拿、不涨停尾盘卖、止损、多拿、推迟一天
+  - 14:55 逐只检查持仓：涨停拿、不涨停尾盘卖、止损、多拿、推迟一天；要卖的 14:57–15:00 在收盘集合竞价挂单（按收盘价成交）
   - 本地记录持仓（买入价、股数、多拿 / 推迟状态），数据只存在本机
 只用 Python 标准库。仅供参考，不构成投资建议；下单以券商软件为准。
 """
@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 6
+CORE_VERSION = 7
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -288,7 +288,7 @@ def build_orders(red_override=None):
     save_state(); log(f'开单单已生成：红盘率 {red:.1%}（{gate_txt}），买入 {sum(r["action"] != "不买" for r in out)} 只')
 
 
-# ------------------------------------------------------------------ 14:47 卖出检查
+# ------------------------------------------------------------------ 14:55 卖出检查（v7：从 14:47 推迟，判定更接近收盘，与回测一致）
 def build_sells():
     R = S.get('rules') or {}; sl = R.get('sell', {}); names = R.get('names', {})
     today = bj_now().strftime('%Y%m%d'); hold = S['holdings']
@@ -314,7 +314,8 @@ def build_sells():
             elif n >= sl.get('B_max_days', 20): r.update(action='卖出', why=f'已拿 {n} 天')
             else: r.update(action='持有', why=f'恐慌低吸：高点 {peak:.2f}，跌破 {peak * 0.9:.2f} 再卖', set=dict(peak=peak))
             continue
-        if pnl < -sl.get('stop', 0.08): r.update(action='卖出', why=f'亏 {pnl:.1%}，超过 8% 止损'); continue
+        if pnl < -sl.get('stop', 0.08):
+            lp = max(math.floor(p * 0.98 * 100) / 100, round(dn + 0.01, 2)); r.update(action='卖出', limit=lp, why=f'亏 {pnl:.1%}，超过 8% 止损；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出'); continue
         if zt: act, why, st = '持有', '涨停，继续拿', {}
         elif s == 'LD' and ret >= sl.get('LD_extra_ratio', 0.7) * lim and h.get('extra', 0) < sl.get('LD_extra_max', 3):
             act, why, st = '持有', f'总龙头首阴涨 {ret:.1%}（≥ 涨停幅 70%），多拿一天（第 {h.get("extra", 0) + 1} 次）', dict(extra=h.get('extra', 0) + 1)
@@ -322,6 +323,9 @@ def build_sells():
             act, why, st = '推迟', f'亏损且中证1000 {zr:+.2%}（≤ −1%），推迟到明天尾盘卖（只推迟一次）', dict(delayed=1)
         else: act, why, st = '卖出', '没涨停，尾盘卖', {}
         if act != '卖出' and n >= sl.get('max_days', 11): act, why, st = '卖出', f'已拿 {n} 天，到期', {}
+        if act == '卖出':
+            lp = max(math.floor(p * 0.98 * 100) / 100, round(dn + 0.01, 2))
+            r['limit'] = lp; why += f'；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出（按收盘价成交）'
         r.update(action=act, why=why, set=st)
     with LOCK:
         S['sells'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, zz1000=round(zr * 100, 2), rows=rows); S['sells_date'] = today
@@ -372,7 +376,7 @@ def scheduler():
             if wk and '0925' <= hm < '0931' and S.get('orders_date') != today and (hm >= '0926' or now.second >= 15):
                 try: build_orders()
                 except Exception as e: log(f'自动生成开单单失败：{e}（可在页面手动填写红盘率后生成）'); S['orders_date'] = today + '_fail'
-            if wk and '1447' <= hm < '1456' and S.get('sells_date') != today:
+            if wk and '1455' <= hm < '1500' and S.get('sells_date') != today:
                 try: build_sells()
                 except Exception as e: log(f'卖出检查失败：{e}'); S['sells_date'] = today + '_fail'
             if wk and '0930' <= hm <= '1500':
@@ -473,7 +477,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div id="orders"></div></div>
 <div class="card"><h2>② 盘中：高标被砸挂单</h2><div id="kw" class="mute">无</div></div>
 <div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖）</h2><div id="brk" class="mute">无</div></div>
-<div class="card"><h2>③ 14:47 卖出检查（自动，也可手动）</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
+<div class="card"><h2>③ 14:55 卖出检查（自动，也可手动）；要卖的 14:57 起在收盘集合竞价挂单</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
 <div class="card"><h2>持仓（只存在本机）</h2><div id="hold"></div>
 <div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="9" placeholder="YYYYMMDD"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
 <div class="card"><h2>今日计划候选</h2><div id="cand"></div></div>
