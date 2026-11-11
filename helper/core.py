@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 8
+CORE_VERSION = 9
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -50,6 +50,25 @@ def load_state():
     except Exception: return {}
 
 
+def norm_date(x, today=None):
+    """把手填的买入日统一成 YYYYMMDD。认得：20261110、2026-11-10、2026/11/10、2026.11.10、2026年11月10日、11-10、11/10、11.10、11月10日、1110（后四种按今年，晚于今天就算去年）。"""
+    import re
+    today = today or bj_now().strftime('%Y%m%d'); t = str(x or '').strip()
+    if not t: return today
+    t = t.replace('年', '-').replace('月', '-').replace('日', '').replace('号', '').replace('/', '-').replace('.', '-').replace(' ', '')
+    m = re.fullmatch(r'(\d{4})(\d{2})(\d{2})', t) or re.fullmatch(r'(\d{4})-(\d{1,2})-(\d{1,2})', t)
+    if m: y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.fullmatch(r'(\d{1,2})-(\d{1,2})', t) or re.fullmatch(r'(\d{2})(\d{2})', t)
+        if not m: raise RuntimeError(f'买入日「{x}」看不懂，请写成 20261110 或 11-10 这样的格式')
+        y, mo, d = int(today[:4]), int(m.group(1)), int(m.group(2))
+        if f'{y:04d}{mo:02d}{d:02d}' > today: y -= 1
+    try: v = dt.date(y, mo, d).strftime('%Y%m%d')
+    except ValueError: raise RuntimeError(f'买入日「{x}」不是有效日期')
+    if v > today: raise RuntimeError(f'买入日 {v} 晚于今天 {today}')
+    return v
+
+
 def save_state():
     with LOCK:
         keep = {k: S.get(k) for k in ['equity', 'holdings', 'history', 'mirror', 'orders', 'sells', 'manual_red', 'orders_date', 'sells_date']}
@@ -58,6 +77,9 @@ def save_state():
 
 S = load_state()
 S.setdefault('equity', 0.0); S.setdefault('holdings', []); S.setdefault('history', []); S.setdefault('log', [])
+for _h in S['holdings']:          # v9：修正以前手填的非标准买入日
+    try: _h['entry'] = norm_date(_h.get('entry'))
+    except Exception: pass
 
 
 # ------------------------------------------------------------------ 网络
@@ -346,7 +368,9 @@ def build_sells():
         if h['entry'] == today: r.update(action='持有', why='今天买入，T+1 不能卖'); continue
         if not x or not x.get('price'): r.update(action='?', why='没取到行情（停牌？）'); continue
         p, pc = x['price'], x['pc']; lim = lim_of(h['code'], h['name']); up = limit_price(pc, lim); dn = limit_price(pc, lim, False)
-        ret = p / pc - 1; pnl = p / h['buy_price'] - 1; n = held_days(h['entry'], today)
+        ret = p / pc - 1; pnl = p / h['buy_price'] - 1
+        try: n = held_days(norm_date(h['entry'], today), today)
+        except Exception: r.update(action='?', why=f'买入日「{h["entry"]}」格式不对，请点「修改」改成 20261110 这样的格式'); continue
         r.update(price=p, ret=round(ret * 100, 2), pnl=round(pnl * 100, 2), days=n)
         if p <= dn + 0.005 and x.get('high') == x.get('low'): r.update(action='卖不出', why='跌停封死，明天开盘卖'); continue
         zt = p >= up - 0.005
@@ -458,7 +482,7 @@ def api_post(path, body):
                                   shares=int(body.get('shares') or r['shares']), peak=float(body.get('price') or r['limit'] or r['price']), extra=0, delayed=0))
         r['done'] = True
     elif path == '/api/add_holding':
-        S['holdings'].append(dict(code=body['code'].strip(), name=body.get('name', '').strip(), src=body['src'], entry=body.get('entry') or today,
+        S['holdings'].append(dict(code=body['code'].strip().zfill(6), name=body.get('name', '').strip(), src=body['src'], entry=norm_date(body.get('entry'), today),
                                   buy_price=float(body['price']), shares=int(body['shares']), peak=float(body['price']), extra=0, delayed=0))
     elif path == '/api/sold':
         h = next(x for x in S['holdings'] if x['code'] == body['code'])
@@ -469,10 +493,10 @@ def api_post(path, body):
         h = next(x for x in S['holdings'] if x['code'] == body['code']); h.update(r.get('set') or {}); r['done'] = True
     elif path == '/api/edit_holding':   # 修改填错的持仓
         h = next(x for x in S['holdings'] if x['code'] == body['orig'])
-        new = body['code'].strip()
+        new = body['code'].strip().zfill(6)
         if new != body['orig'] and any(x['code'] == new for x in S['holdings']): raise RuntimeError(f'持仓里已经有 {new}')
         old_px = h['buy_price']
-        h.update(code=new, name=body.get('name', '').strip() or h['name'], src=body['src'], entry=body.get('entry') or h['entry'],
+        h.update(code=new, name=body.get('name', '').strip() or h['name'], src=body['src'], entry=norm_date(body.get('entry') or h['entry'], today),
                  buy_price=float(body['price']), shares=int(body['shares']))
         if h.get('peak') in (None, old_px) or h['peak'] < h['buy_price']: h['peak'] = h['buy_price']
         if 'extra' in body and body['extra'] != '': h['extra'] = int(body['extra'])
@@ -522,7 +546,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖）</h2><div id="brk" class="mute">无</div></div>
 <div class="card"><h2>③ 14:55 卖出检查（自动，也可手动）；要卖的 14:57 起在收盘集合竞价挂单</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
 <div class="card"><h2>持仓（只存在本机）</h2><div id="hold"></div>
-<div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="9" placeholder="YYYYMMDD"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
+<div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="11" placeholder="如 20261110 或 11-10"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
 <div class="card"><h2>今日计划候选</h2><div id="cand"></div></div>
 <div class="card"><h2>计划全文</h2><pre id="md"></pre></div>
 <div class="card"><h2>设置与日志</h2><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
