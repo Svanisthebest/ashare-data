@@ -66,8 +66,7 @@ def sealed_minutes(codes, D, ups):
         if c is not None:
             for k in range(2):
                 try:
-                    m = c.minutes(symbol=code, date=D)
-                    if m is None or not len(m): m = c.minute(symbol=code)
+                    m = c.minutes(symbol=code, date=D)          # 只取指定交易日；取不到就走 baostock（带日期），不用不带日期的接口
                     if m is not None and len(m) >= 200:
                         n = int((m.price.astype(float) >= ups[code] - 0.005).sum()); break
                 except Exception:
@@ -168,7 +167,10 @@ def write_helper_files(out, D):
                  notes=['Y（炸板弱转强）：竞价高开 ≥3% 且 竞价成交额是近 5 日平均成交额的 3%–10% 才开盘买；N、P、Q 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
                         '卖出：10:30 后冲到涨停又打开就立即卖；其余不涨停就 14:50 尾盘卖；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；亏损且中证1000 跌 ≥ 1% 推迟一天'])
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
-    json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json',
+    import hashlib
+    h = lambda f: hashlib.sha256(open(f, 'rb').read()).hexdigest()[:16] if os.path.exists(f) else None
+    json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json', version='v1.5',
+                   csv_sha256=h(os.path.join(out, 'plan', f'{D}.csv')), rules_sha256=h(os.path.join(hp, 'rules.json')),
                    generated=dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')), open(os.path.join(hp, 'latest.json'), 'w'), ensure_ascii=False, indent=1)
 
 
@@ -284,6 +286,7 @@ def main():
         P['说明'] = [f"{w}【{BV[c]['板块']} 今天量比 {BV[c]['板块量比']}、20日 {BV[c]['板块20日']:+.0f}%：{BV[c]['板块提示'][1:]}，次日容易分歧，可少买或不买】" + ' ' + str(x) if c in BV and BV[c]['板块提示'] else x
                        for c, x, w in zip(P['代码'], P['说明'], ['⚠'] * len(P))]
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
+    if len(P): P['优先级'] = P.groupby('src').cumcount() + 1          # 路线内执行顺序 = 加入顺序（与回测、模拟盘、开单工具一致）
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
     # 写计划
     L = [f'# v1.5 计划：{d} 收盘 → {nxt}', '',
@@ -298,7 +301,7 @@ def main():
          '| < 40% | 总龙头首阴、缩量断板低开、高标被砸、首板强势未封低开、2板断板强收、炸板弱转强 |', '',
          '最多同时 5 只（含已有持仓）；缩量断板低开、首板强势未封低开、2板断板强收、高标被砸、炸板弱转强各最多 2 只，低位启动最多 3 只。顺序：总龙头首阴 → 2板龙头 → 周一放宽 → 缩量断板低开 → 恐慌低吸 → 高标被砸 → 低位启动 → 首板强势未封低开 → 2板断板强收 → 炸板弱转强。一字涨停或停牌跳过，用同路线下一只补；同一只股票只买一次（已持有或已在前面路线买过的跳过）。', '竞价红盘率口径：沪深 A 股（不含北交所、ST、退市、停牌），9:25 竞价价高于昨收的家数 ÷ 全部，平盘不算红；目前约 5,020 只，> 55% 约需 2,765 家，40% 约 2,010 家。', '']
     for src in ORDER:
-        x = P[P.src == src].sort_values('rk') if len(P) else P
+        x = P[P.src == src] if len(P) else P          # 按执行顺序显示，不另排
         L.append(f'## {NAME[src]}（每笔 {SIZE[src]}%{"，最多 " + str(CAP[src]) + " 只" if src in CAP else ""}）')
         if not len(x): L += ['', '无候选。', '']; continue
         L += ['', '| 代码 | 名称 | 收盘 | 涨跌% | 成交额亿 | 位置% | 所属板块（量比） | 说明 |', '|---|---|---|---|---|---|---|---|']

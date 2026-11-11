@@ -18,6 +18,10 @@ on:
         description: "回补起始日 YYYYMMDD，例如 20220101（留空则不用）"
         required: false
         default: ""
+      force_plan:
+        description: "当天计划已存在时是否重新生成（1=重新生成；默认不覆盖，保证开单工具和模拟盘用的是同一份）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -65,7 +69,11 @@ jobs:
         run: |
           D=$(ls data/daily | tail -1 | cut -c1-8)
           pip install -q mootdx baostock || echo "分钟线依赖安装失败"
-          python clusters_daily.py --date $D --out data && python v1_plan.py --date $D --out data || echo "计划生成失败"
+          if [ -f data/plan/$D.md ] && [ "${{ github.event.inputs.force_plan }}" != "1" ]; then
+            echo "data/plan/$D.md 已存在，计划冻结不覆盖（要重新生成请手动运行并填 force_plan=1）"
+          else
+            python clusters_daily.py --date $D --out data && python v1_plan.py --date $D --out data || echo "计划生成失败"
+          fi
           python min5_today.py --date $D --out data || echo "当天分钟线未取到，模拟盘按收盘价"
           python sim_book.py --date $D --out data || echo "模拟盘未更新（当天已处理过则沿用已有记录）"
           if [ -f data/sim/$D.md ] && [ -f data/plan/$D.md ] && ! grep -q "^## 模拟盘" data/plan/$D.md; then { echo; echo; cat data/sim/$D.md; } >> data/plan/$D.md; fi

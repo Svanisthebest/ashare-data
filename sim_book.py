@@ -74,14 +74,14 @@ def main():
             if c in held: continue
             o = px(c, 'open')
             if o is None: skips.append(f"{NAME[s]} {r['名称']}：停牌"); continue
-            if t.loc[c, 'high'] == t.loc[c, 'low'] and o >= t.loc[c, 'up'] - 0.005: skips.append(f"{NAME[s]} {r['名称']}：一字涨停买不到"); continue
+            if o >= t.loc[c, 'up'] - 0.005: skips.append(f"{NAME[s]} {r['名称']}：竞价在涨停价买不到"); continue          # 与开单工具一致：9:25 只知道开盘价，不用全天最高最低
             if s == 'L' and o >= t.loc[c, 'prev_close'] * 1.02: skips.append(f"{NAME[s]} {r['名称']}：高开 {o / t.loc[c, 'prev_close'] - 1:+.1%}，超过 2% 放弃"); continue
             pc_ = t.loc[c, 'prev_close']; ep = o
             if s in ('N', 'P', 'Q') and not (pc_ * 0.95 <= o < pc_): skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，不在低开 0–5% 区间"); continue
             if s == 'Y':
                 if o < pc_ * 1.03: skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，高开不到 3%"); continue
                 a5 = float(r.get('均额5日亿') or 0) * 1e8; auc = AUC.get(c)
-                if auc is None: auc_note.append(r['名称'])
+                if auc is None: skips.append(f"{NAME[s]} {r['名称']}：没有竞价成交额数据，待核，不买（与开单工具一致）"); auc_note.append(r['名称']); continue
                 elif a5 > 0 and not 0.03 <= auc / a5 < 0.10: skips.append(f"{NAME[s]} {r['名称']}：竞价额 {auc / 1e4:.0f} 万 = 5 日均额的 {auc / a5:.1%}，不在 3–10%"); continue
             if s == 'K':
                 if not (pc_ * 0.97 <= o < pc_): skips.append(f"{NAME[s]} {r['名称']}：开盘 {o / pc_ - 1:+.1%}，不在 −3% 到 0 之间"); continue
@@ -139,7 +139,8 @@ def main():
     tf = os.path.join(simd, 'trades.csv')
     rows = [dict(日期=D, 动作='买入', 路线=b[0], 代码=b[1], 名称=b[2], 价格=round(b[3], 2), 仓位=round(b[4], 4)) for b in buys] + \
            [dict(日期=D, 动作='卖出', 路线=s_[0], 代码=s_[1], 名称=s_[2], 价格=round(s_[4], 2), 收益=round(s_[5], 4), 原因=s_[6]) for s_ in sells]
-    if rows: pd.DataFrame(rows).to_csv(tf, mode='a', header=not os.path.exists(tf), index=False, encoding='utf-8-sig')
+    COLS = ['日期', '动作', '路线', '代码', '名称', '价格', '仓位', '收益', '原因']          # 固定字段，买入行收益/原因留空
+    if rows: pd.DataFrame(rows).reindex(columns=COLS).to_csv(tf, mode='a', header=not os.path.exists(tf), index=False, encoding='utf-8-sig')
     gate = '> 55%，正常开仓（高标被砸、周一放宽不做）' if red > 0.55 else ('40–55%，只做总龙头首阴 / 缩量断板低开 / 高标被砸 / 首板强势未封低开 / 2板断板强收 / 炸板弱转强 / 周一放宽' if red >= 0.40 else '< 40%，只做总龙头首阴 / 缩量断板低开 / 高标被砸 / 首板强势未封低开 / 2板断板强收 / 炸板弱转强')
     L_ = [f'## 模拟盘（{D}）', '', f'- 今天 9:25 全A竞价红盘率 **{red:.1%}**（{gate}）；按 {P} 收盘的候选执行。',
           f'- 账户净值 **{eq:.4f}**（2026-11-02 起始 1.0000），现金 {book["cash"] / eq:.0%}，持仓 {len(book["pos"])} 只。', '']
@@ -147,7 +148,7 @@ def main():
     other = skips
     if other: L_ += ['**按规则没买**', ''] + [f'- {x}' for x in other] + ['']
     L_ += ['**今天卖出**', ''] + ([f'- {x[0]}：{x[2]} 买入 {x[3]:.2f} → 卖出 {x[4]:.2f}，{x[5]:+.1%}（{x[6]}）' for x in sells] or ['- 无']) + ['']
-    if auc_note: L_ += [f"（{'、'.join(auc_note)} 没有竞价成交额数据，炸板弱转强只按高开 ≥3% 判断）", '']
+    if auc_note: L_ += [f"（{'、'.join(auc_note)} 没有竞价成交额数据，炸板弱转强按待核不买）", '']
     if no_m5: L_ += [f"（{'、'.join(no_m5)} 没取到当天 5 分钟线，炸板规则没法判断，按收盘价处理）", '']
     L_ += ['**收盘持仓**', '']
     if book['pos']:
