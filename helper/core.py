@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 7
+CORE_VERSION = 8
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -182,19 +182,60 @@ def load_cache():
     except Exception: return False
 
 
+_TD = {}
+
+
+def trade_days():
+    """最近约 40 个交易日（YYYYMMDD 列表），取上证指数日 K 线的日期，自动包含节假日休市；每天只取一次。取不到返回 None。"""
+    today = bj_now().strftime('%Y%m%d')
+    if _TD.get('day') == today and _TD.get('list'): return _TD['list']
+    if MOCK:
+        root = MOCK.split(';')[0]
+        L = sorted(os.path.basename(f)[:8] for f in os.listdir(os.path.join(root, 'data', 'daily')) if f.endswith('.csv.gz'))
+        L = [d for d in L if d <= MOCK.split(';')[1]][-40:]
+    else:
+        L = None
+        for url in ['https://web.ifzq.gtimg.cn/appstock/app/fqkline/get', 'https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get']:
+            try:
+                j = json.loads(http_get(url, {'param': 'sh000001,day,,,40,qfq'}, tries=2))
+                d = (j.get('data') or {}).get('sh000001') or {}
+                rows = d.get('day') or d.get('qfqday') or []
+                L = sorted({r[0].replace('-', '') for r in rows if r})
+                if len(L) >= 10: break
+            except Exception as e:
+                log(f'交易日历获取失败（{e}），改用工作日估算')
+    if L: _TD.update(day=today, list=L)
+    return L
+
+
+def prev_trade_day(today=None):
+    today = today or bj_now().strftime('%Y%m%d'); L = trade_days()
+    if not L: return None
+    x = [d for d in L if d < today]
+    return x[-1] if x else None
+
+
 def plan_status():
-    """计划是给哪一天用的。"""
+    """计划是给哪一天用的；按真实交易日历判断是否过期。"""
     lt = S.get('latest') or {}; pd_ = lt.get('plan_date'); now = bj_now(); today = now.strftime('%Y%m%d')
     if not pd_: return '未读取计划'
     if pd_ == today: return f'这是今天（{pd_}）收盘生成的，供下一交易日使用'
-    gap = (now.date() - dt.datetime.strptime(pd_, '%Y%m%d').date()).days
+    prev = prev_trade_day(today)
+    if prev and pd_ < prev: return f'⚠ 计划 {pd_} 已过期：上一个交易日是 {prev}，当晚的计划没更新，不能用来开单'
+    if prev is None:
+        gap = (now.date() - dt.datetime.strptime(pd_, '%Y%m%d').date()).days
+        if now.weekday() < 5 and gap > (3 if now.weekday() == 0 else 1): return f'⚠ 计划 {pd_} 可能已过期（交易日历没取到，按工作日估算）'
     if now.weekday() >= 5: return f'今天是周末；计划 {pd_} 供下一交易日使用'
-    if gap > 4: return f'⚠ 计划日期 {pd_} 已过期（{gap} 天前），可能数据没更新'
     return f'计划 {pd_} 收盘生成，供今天使用'
 
 
 def held_days(entry, today):
-    """买入当天算第 1 天，按工作日数（节假日未扣，可能偏多 1–2 天）。"""
+    """买入当天算第 1 天，按交易日数（用交易日历，节假日不算）；日历取不到时按工作日估算。"""
+    L = trade_days()
+    if L and entry >= L[0]:
+        days = [d for d in L if entry <= d <= today]
+        if today not in days and dt.datetime.strptime(today, '%Y%m%d').weekday() < 5: days.append(today)
+        return len(days)
     a = dt.datetime.strptime(entry, '%Y%m%d').date(); b = dt.datetime.strptime(today, '%Y%m%d').date(); n = 0
     while a <= b:
         if a.weekday() < 5: n += 1
@@ -202,11 +243,13 @@ def held_days(entry, today):
     return n
 
 
-# ------------------------------------------------------------------ 9:25 开单
 def build_orders(red_override=None):
     R = S.get('rules'); cand = S.get('cand') or []
     if not R: raise RuntimeError('还没读到规则 / 计划')
     today = bj_now().strftime('%Y%m%d')
+    pd_ = (S.get('latest') or {}).get('plan_date'); prev = prev_trade_day(today)
+    if prev and pd_ and pd_ < prev:
+        raise RuntimeError(f'计划日期 {pd_} 不是上一个交易日 {prev}：当晚计划没更新，为避免用旧计划开单，不生成开单单。请稍后点「刷新计划」，或查看 GitHub 运行情况')
     allq = {} if red_override is not None else quotes_all()
     red = red_override
     if red is None:

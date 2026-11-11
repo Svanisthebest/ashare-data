@@ -151,7 +151,7 @@ def write_helper_files(out, D):
     """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
     import json
     hp = os.path.join(out, 'helper'); os.makedirs(hp, exist_ok=True)
-    rules = dict(version='v1.5', min_core=7, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
+    rules = dict(version='v1.5', min_core=8, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
                  gate=dict(high=0.55, low=0.40,
                            allowed_high=[s for s in ORDER if s not in ('K', 'M')],
                            allowed_mid=['LD', 'K', 'N', 'P', 'Q', 'M', 'Y'],
