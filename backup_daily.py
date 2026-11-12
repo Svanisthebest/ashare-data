@@ -19,6 +19,14 @@ INDEX = {"1.000001": "上证指数", "0.399001": "深证成指", "0.399006": "�
          "1.000300": "沪深300", "1.000905": "中证500", "1.000852": "中证1000", "0.899050": "北证50"}
 
 
+def _vol_unit(vol, amt, price):
+    """成交量单位自动判断：手(×100) 还是 股(×1)。按 成交额 ≈ 成交量 × 价格 选更接近的那个（科创板等接口给的是股）。"""
+    if vol <= 0 or price <= 0 or amt <= 0:
+        return vol * 100
+    r = amt / (vol * price)
+    return vol * 100 if abs(r / 100 - 1) < abs(r - 1) else vol
+
+
 def _get(path, params, tries=3):
     err = None
     for k in range(tries):
@@ -89,7 +97,7 @@ def em_snapshot(ymd):
         days.append(_ts_day(r.get("f124")))
         out.append({"date": f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}", "market": _market(code, r.get("f13", 0)), "code": code,
                     "name": str(r.get("f14", "")).strip(), "prev_close": pc, "open": o, "high": h, "low": lo, "close": c,
-                    "volume": int(round(vol * 100)), "amount": round(amt, 2)})
+                    "volume": int(round(_vol_unit(vol, amt, c))), "amount": round(amt, 2)})
     n_today = sum(d == ymd for d in days)
     if n_today < 0.9 * max(len(days), 1):
         latest = max(days) if days else "?"
@@ -140,7 +148,8 @@ def qq_quotes(codes):
             if len(f) < 38:
                 continue
             try:
-                out[k[-6:]] = dict(close=float(f[3]), pc=float(f[4]), vol=float(f[6]) * 100, date=f[30][:8])
+                pva = f[35].split("/")
+                out[k[-6:]] = dict(close=float(f[3]), pc=float(f[4]), vol=_vol_unit(float(pva[1]), float(pva[2]), float(f[3])), date=f[30][:8])
             except ValueError:
                 pass
     return out
@@ -187,7 +196,7 @@ def qq_snapshot(ymd, codes):
             try:
                 pva = f[35].split("/")
                 c, pc, o, h, lo = float(f[3]), float(f[4]), float(f[5]), float(f[33]), float(f[34])
-                vol, amt = float(pva[1]) * 100, float(pva[2])
+                amt = float(pva[2]); vol = _vol_unit(float(pva[1]), amt, c)
             except (ValueError, IndexError):
                 continue
             if c <= 0 or vol <= 0 or o <= 0:
