@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 11
+CORE_VERSION = 12
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -83,17 +83,26 @@ for _h in S['holdings']:          # v9：修正以前手填的非标准买入日
 
 
 # ------------------------------------------------------------------ 网络
+PLAIN_OK = ('qt.gtimg.cn', 'eastmoney.com', 'ifzq.gtimg.cn', 'finance.qq.com')   # 这些行情接口也支持 http：https 握手超时时改走 http
+
+
 def http_get(url, params=None, timeout=10, enc=None, tries=3):
+    """v12：行情接口 https 握手超时 / SSL 出错时，自动改用 http 再试（行情是公开数据，不含账户信息）。"""
     if params: url += ('&' if '?' in url else '?') + urllib.parse.urlencode(params)
+    urls = [url]
+    if url.startswith('https://') and any(h in url.split('/')[2] for h in PLAIN_OK): urls.append('http://' + url[8:])
     last = None
     for t in range(tries):
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            b = urllib.request.urlopen(req, timeout=timeout).read()
-            return b.decode(enc or 'utf-8', errors='replace')
-        except Exception as e:
-            last = e; time.sleep(0.5 + t)
-    raise last
+        for u in urls:
+            try:
+                req = urllib.request.Request(u, headers=UA)
+                b = urllib.request.urlopen(req, timeout=timeout).read()
+                return b.decode(enc or 'utf-8', errors='replace')
+            except Exception as e:
+                last = e
+        time.sleep(0.5 + t)
+    host = url.split('/')[2] if '://' in url else url
+    raise RuntimeError(f'连不上 {host}（{str(last)[:80]}）。多半是网络或代理/VPN 不稳定，稍后再点一次；9:25 开单单可在页面手动填红盘率生成')
 
 
 def repo_get(path):
