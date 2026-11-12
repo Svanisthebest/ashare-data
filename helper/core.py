@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 12
+CORE_VERSION = 13
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -130,7 +130,7 @@ def _mock_rows():
     root, d = MOCK.split(';'); import gzip
     f = os.path.join(root, 'data', 'daily', f'{d}.csv.gz'); rows = {}
     for r in csv.DictReader(io.StringIO(gzip.open(f).read().decode('utf-8-sig'))):
-        try: rows[r['code']] = dict(code=r['code'], name=r['name'], open=float(r['open']), pc=float(r['prev_close']), price=float(r['close']), high=float(r['high']), low=float(r['low']), amount=float(r.get('amount') or 0))
+        try: rows[r['code']] = dict(code=r['code'], name=r['name'], open=float(r['open']), pc=float(r['prev_close']), price=float(r['close']), high=float(r['high']), low=float(r['low']), amount=float(r.get('amount') or 0), date=d)
         except Exception: pass
     return rows
 
@@ -180,6 +180,14 @@ def quotes_some(codes):
                                  amount=float(f[37] or 0) * 1e4 if len(f) > 37 else 0.0)
             except Exception: pass
     return out
+
+
+def stale_quotes(q, today):
+    """v13：行情日期不是今天（节假日、或行情还没更新）→ 返回行情日期；正常返回 None。只看个股，不看指数。"""
+    ds = [v.get('date') for k, v in q.items() if k != 'ZZ1000' and v.get('date')]
+    if not ds: return None
+    n = sum(d == today for d in ds)
+    return None if n >= 0.5 * len(ds) else max(ds)
 
 
 # ------------------------------------------------------------------ 计划与规则
@@ -288,6 +296,8 @@ def build_orders(red_override=None):
         if len(univ) < 3000: raise RuntimeError(f'全市场行情只有 {len(univ)} 只，算不了红盘率；可以在页面上手动填写红盘率')
         red = sum(q['open'] > q['pc'] for q in univ) / len(univ)
     some = quotes_some(list({c['代码'] for c in cand} | {h['code'] for h in S['holdings']}))
+    sd = stale_quotes(some, today)
+    if sd: raise RuntimeError(f'行情日期是 {sd}，不是今天：今天可能不是交易日（节假日），或行情还没更新。不生成开单单')
     for c, q in some.items():
         if c in allq and not allq[c].get('amount') and q.get('amount'): allq[c]['amount'] = q['amount']
         allq.setdefault(c, q)
@@ -369,7 +379,10 @@ def build_sells():
     if not hold:
         with LOCK: S['sells'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, rows=[]); S['sells_date'] = today
         return
-    q = quotes_some([h['code'] for h in hold]); z = q.get('ZZ1000'); zr = (z['price'] / z['pc'] - 1) if z and z.get('pc') else 0.0
+    q = quotes_some([h['code'] for h in hold])
+    sd = stale_quotes(q, today)
+    if sd: raise RuntimeError(f'行情日期是 {sd}，不是今天（节假日？），不做卖出检查')
+    z = q.get('ZZ1000'); zr = (z['price'] / z['pc'] - 1) if z and z.get('pc') else 0.0
     rows = []
     for h in hold:
         x = q.get(h['code']); s = h['src']; r = dict(code=h['code'], name=h['name'], route=names.get(s, s), buy=h['buy_price'], shares=h['shares'])
@@ -416,6 +429,7 @@ def watch_breaks():
     hold = [h for h in S['holdings'] if h['entry'] != today and h['src'] not in sl.get('break_exempt', ['B'])]
     if not hold: return
     q = quotes_some([h['code'] for h in hold]); names = R.get('names', {})
+    if stale_quotes(q, today): return                     # 节假日：行情是旧的，不提醒
     al = [a for a in S.get('breaks', []) if a['date'] == today]; seen = {a['code'] for a in al}
     # 与回测一致：按 5 分钟 K 线收盘判断——只在每个 5 分钟整点（如 10:35、10:40）看一次价格，盘中一闪而过又回封的不算
     now = bj_now(); slot = now.strftime('%H') + f'{now.minute // 5 * 5:02d}'
