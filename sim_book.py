@@ -20,6 +20,11 @@ NAME = {'B': '恐慌低吸', 'RB': '跌深反弹（v1.3 已停用）', 'L': '2�
         'A': '低位跟随（v1.3 已停用）', 'M': '周一放宽', 'K': '高标被砸', 'N': '缩量断板低开', 'P': '首板强势未封低开', 'Q': '2板断板强收', 'Y': '炸板弱转强', 'T': '试验仓（v1 已停用）'}
 
 
+# 交易成本（每笔买卖来回）：用户实际费率 佣金万0.85×2、免5，印花税卖出 0.05%，过户费 0.001%×2 ≈ 0.069%；
+# 另按 0.2% 估计滑点（模拟盘按开盘价/收盘价成交，实盘挂单会差一点），等实盘成交对账有数据后再校准。
+FEE = 0.000085 * 2 + 0.0005 + 0.00001 * 2
+SLIP = 0.002
+
 def day_file(root, d): return os.path.join(root, 'daily', f'{d}.csv.gz')
 
 
@@ -129,7 +134,7 @@ def main():
             if why is None and p['src'] not in ('RB', 'B') and p['held'] >= 11: why = '拿满 11 天'
         if why:
             cost = p.get('cost', p['val'] * p['ep'] / p['last'])   # 买入时投入的金额
-            r_ = sp / p['ep'] - 1 - 0.003; book['cash'] += cost * (1 + r_)   # 按买入金额 × 买入以来收益结算，不能用已逐日更新的市值再乘一次
+            r_ = sp / p['ep'] - 1 - FEE - SLIP; book['cash'] += cost * (1 + r_)   # 按买入金额 × 买入以来收益结算，不能用已逐日更新的市值再乘一次
             sells.append((NAME[p['src']], c, p['name'], p['ep'], sp, r_, why))
         else:
             p['val'] = p['val'] * cl / p['last']; p['last'] = cl; keep.append(p)
