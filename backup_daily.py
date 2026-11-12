@@ -29,7 +29,7 @@ def _get(path, params, tries=3):
                 return r.json()
             except Exception as e:      # noqa: BLE001
                 err = e
-        time.sleep(2 * (k + 1))
+        time.sleep(3 * (k + 1))
     raise RuntimeError(f"东方财富接口失败：{err}")
 
 
@@ -47,20 +47,34 @@ def _ts_day(ts):
 
 
 def em_snapshot(ymd):
-    rows, pn, total = [], 1, None
-    while True:
-        j = _get("/api/qt/clist/get", dict(pn=pn, pz=100, po=0, np=1, fltt=2, invt=2, fid="f12", fs=FS_A,
+    rows, total = [], None
+    # 先试一次取全部（部分节点允许大页）；不行再按 100 一页慢慢翻，每页单独重试
+    try:
+        j = _get("/api/qt/clist/get", dict(pn=1, pz=6000, po=0, np=1, fltt=2, invt=2, fid="f12", fs=FS_A,
                                             ut="bd1d9ddb04089700cf9c27f6f7426281",
-                                            fields="f12,f13,f14,f2,f15,f16,f17,f18,f5,f6,f124"))
+                                            fields="f12,f13,f14,f2,f15,f16,f17,f18,f5,f6,f124"), tries=2)
         data = (j or {}).get("data") or {}
         diff = data.get("diff") or []
-        if isinstance(diff, dict):
-            diff = list(diff.values())
-        total = data.get("total", total)
-        rows += diff
-        if not diff or (total and len(rows) >= total) or pn > 120:
-            break
-        pn += 1
+        rows = list(diff.values()) if isinstance(diff, dict) else diff
+        total = data.get("total")
+    except Exception:       # noqa: BLE001
+        rows = []
+    if not total or len(rows) < 0.98 * total:
+        rows, pn = [], 1
+        while True:
+            j = _get("/api/qt/clist/get", dict(pn=pn, pz=100, po=0, np=1, fltt=2, invt=2, fid="f12", fs=FS_A,
+                                                ut="bd1d9ddb04089700cf9c27f6f7426281",
+                                                fields="f12,f13,f14,f2,f15,f16,f17,f18,f5,f6,f124"), tries=5)
+            data = (j or {}).get("data") or {}
+            diff = data.get("diff") or []
+            if isinstance(diff, dict):
+                diff = list(diff.values())
+            total = data.get("total", total)
+            rows += diff
+            if not diff or (total and len(rows) >= total) or pn > 120:
+                break
+            pn += 1
+            time.sleep(0.4)
     if not total or len(rows) < 0.98 * total or len(rows) < 5000:
         raise RuntimeError(f"东方财富快照不完整：取到 {len(rows)} / {total}")
     out, days = [], []
@@ -150,3 +164,44 @@ def qq_check(df, ymd, n=300, max_bad=0.02):
     if len(bad) > max_bad * len(q):
         raise RuntimeError(msg)
     return msg
+
+
+def qq_snapshot(ymd, codes):
+    """第三层备用：腾讯行情逐批取（代码来自上一交易日的日线文件，新股可能缺）。字段 35 = 现价/成交量(手)/成交额(元)。"""
+    out, days = [], []
+    for i in range(0, len(codes), 60):
+        sym = [("sh" if c.startswith(("6", "9")) and not c.startswith("92") else "bj" if c.startswith(("4", "8", "92")) else "sz") + c for c in codes[i:i + 60]]
+        txt = None
+        for k in range(4):
+            try:
+                r = requests.get("https://qt.gtimg.cn/q=" + ",".join(sym), headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+                r.encoding = "gbk"; txt = r.text; break
+            except Exception:       # noqa: BLE001
+                time.sleep(2 * (k + 1))
+        for line in (txt or "").strip().split(";"):
+            if '="' not in line:
+                continue
+            k_, v = line.split('="', 1); f = v.strip('"\n').split("~")
+            if len(f) < 38:
+                continue
+            try:
+                pva = f[35].split("/")
+                c, pc, o, h, lo = float(f[3]), float(f[4]), float(f[5]), float(f[33]), float(f[34])
+                vol, amt = float(pva[1]) * 100, float(pva[2])
+            except (ValueError, IndexError):
+                continue
+            if c <= 0 or vol <= 0 or o <= 0:
+                continue
+            days.append(f[30][:8])
+            code = k_[-6:]
+            out.append({"date": f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}", "market": k_[-8:-6], "code": code, "name": f[1].strip(),
+                        "prev_close": pc, "open": o, "high": h, "low": lo, "close": c, "volume": int(round(vol)), "amount": round(amt, 2)})
+        time.sleep(0.1)
+    n_today = sum(d == ymd for d in days)
+    if n_today < 0.9 * max(len(days), 1):
+        raise ValueError(f"腾讯行情日期不是 {ymd}（{n_today}/{len(days)}）：非交易日或还没收盘")
+    df = pd.DataFrame(out)
+    df = df[[d == ymd for d in days]] if len(df) else df
+    if len(df) < 4800:
+        raise RuntimeError(f"腾讯行情有成交的股票只有 {len(df)} 只，太少")
+    return df

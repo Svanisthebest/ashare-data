@@ -140,8 +140,17 @@ def save_daily(ymd, root, allow_backup=False):
             raise
         import backup_daily as B
         print(f"通达信盘后包取不到（{e}），改用东方财富快照")
-        st = B.em_snapshot(ymd)
-        msg = B.qq_check(st, ymd)
+        try:
+            st = B.em_snapshot(ymd); src = "eastmoney"
+            msg = B.qq_check(st, ymd)
+        except ValueError:
+            raise                       # 非交易日 / 未收盘：不要用备用数据
+        except Exception as e1:         # noqa: BLE001
+            print(f"东方财富也失败（{e1}），改用腾讯行情")
+            prev = sorted(f for f in os.listdir(os.path.join(root, "daily")) if f.endswith(".csv.gz") and f[:8] < ymd)[-1]
+            codes = list(pd.read_csv(os.path.join(root, "daily", prev), dtype={"code": str}).code)
+            st = B.qq_snapshot(ymd, codes); src = "tencent"
+            msg = f"腾讯行情 {len(st)} 只（缺上一交易日之后的新股）"
         print(msg)
         try:
             _write_index(B.em_index(ymd), ymd, root)
@@ -151,7 +160,7 @@ def save_daily(ymd, root, allow_backup=False):
         st.to_csv(path, index=False, compression="gzip")
         os.makedirs(os.path.dirname(mark), exist_ok=True)
         with open(mark, "w", encoding="utf-8") as f:
-            f.write(f"eastmoney {now:%Y-%m-%d %H:%M}；{msg}\n")
+            f.write(f"{src} {now:%Y-%m-%d %H:%M}；{msg}\n")
         return st
     raw["code"] = raw["code"].astype(str).str.zfill(6)
     idx = raw[[(m, c) in INDEX_KEYS for m, c in zip(raw["market"], raw["code"])]].copy()
@@ -330,7 +339,7 @@ def main():
         backfill(d, args.backfill, root, q, start_ymd=args.backfill_start or None, workers=args.workers)
     step(q, "通达信全A日线", lambda: save_daily(d, root, allow_backup=True))
     if os.path.exists(os.path.join(root, "daily_src", f"{d}.txt")):
-        q[-1]["模块"] = "全A日线（备用：东方财富）"
+        q[-1]["模块"] = "全A日线（备用：" + open(os.path.join(root, "daily_src", f"{d}.txt"), encoding="utf-8").read().split()[0] + "）"
     step(q, "日线与腾讯交叉核对", lambda: cross_check(d, root))
     scan = step(q, "全A扫描与新鲜度", lambda: market_scan(d, root))
     if scan is not None:

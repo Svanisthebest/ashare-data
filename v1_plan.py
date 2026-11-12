@@ -291,7 +291,7 @@ def main():
     # 数据来源与核对（daily_pull 写的 00_quality.csv）
     src_txt = '通达信盘后包'
     try:
-        if os.path.exists(os.path.join(a.out, 'daily_src', f'{D}.txt')): src_txt = '⚠ 通达信盘后包未取到，用的是东方财富收盘快照（停牌股不在其中；通达信包发布后会自动换回）'
+        if os.path.exists(os.path.join(a.out, 'daily_src', f'{D}.txt')): src_txt = '⚠ 通达信盘后包未取到，用的是' + ('腾讯行情' if open(os.path.join(a.out, 'daily_src', f'{D}.txt'), encoding='utf-8').read().startswith('tencent') else '东方财富') + '收盘快照（停牌股不在其中；通达信包发布后会自动换回）'
         Qf = pd.read_csv(os.path.join(a.out, D, '00_quality.csv'))
         cc = Qf[Qf['模块'] == '日线与腾讯交叉核对']
         if len(cc) and cc['状态'].iloc[0] == '成功': src_txt += '；与腾讯行情抽样核对一致'
