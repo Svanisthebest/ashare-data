@@ -288,8 +288,19 @@ def main():
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P['优先级'] = P.groupby('src').cumcount() + 1          # 路线内执行顺序 = 加入顺序（与回测、模拟盘、开单工具一致）
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
+    # 数据来源与核对（daily_pull 写的 00_quality.csv）
+    src_txt = '通达信盘后包'
+    try:
+        if os.path.exists(os.path.join(a.out, 'daily_src', f'{D}.txt')): src_txt = '⚠ 通达信盘后包未取到，用的是东方财富收盘快照（停牌股不在其中；通达信包发布后会自动换回）'
+        Qf = pd.read_csv(os.path.join(a.out, D, '00_quality.csv'))
+        cc = Qf[Qf['模块'] == '日线与腾讯交叉核对']
+        if len(cc) and cc['状态'].iloc[0] == '成功': src_txt += '；与腾讯行情抽样核对一致'
+        elif len(cc) and cc['状态'].iloc[0] == '失败':
+            e = str(cc['错误'].iloc[0]); src_txt += '；与腾讯行情抽样核对：' + ('未核对（腾讯行情取不到）' if '未核对' in e else '⚠ 不一致，' + e.split(': ', 1)[-1][:120])
+    except Exception: pass
     # 写计划
     L = [f'# v1.5.1 计划：{d} 收盘 → {nxt}', '',
+         f'- 数据：{src_txt}。',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
          f'- 量能：{vol_txt}。大票缩量上涨一般走不远，明显放量的上涨才有延续性（仅供参考）。',
          '- 板块量能：候选表里的「所属板块（量比）」是该股当天最强板块的成交额 ÷ 前 5 日均额。量比 ≥1.8，或板块 20 日已涨 >15% 且量比 ≥1.5，会标 ⚠：板块爆量多是情绪高潮，次日容易分歧，可少买或不买（提示，不是规则）。',

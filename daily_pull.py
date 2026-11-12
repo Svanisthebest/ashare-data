@@ -116,24 +116,77 @@ def trading_days_back(end_ymd, n):
 
 
 # ----------------------------------------------------------------------------- 通达信日线落库
-def save_daily(ymd, root):
+def _write_index(idx, ymd, root):
+    os.makedirs(os.path.join(root, "index"), exist_ok=True)
+    idx[["date", "指数", "close", "涨跌幅", "amount"]].to_csv(
+        os.path.join(root, "index", f"{ymd}.csv"), index=False, encoding="utf-8-sig")
+
+
+def save_daily(ymd, root, allow_backup=False):
+    """通达信盘后包优先。取不到、且是今天收盘后时，改用东方财富快照（并抽样与腾讯核对），在 data/daily_src/ 写标记；
+    之后再运行时如果通达信包已经发布，就换回通达信数据并删除标记。"""
     path = os.path.join(root, "daily", f"{ymd}.csv.gz")
-    if os.path.exists(path):
+    mark = os.path.join(root, "daily_src", f"{ymd}.txt")
+    if os.path.exists(path) and not os.path.exists(mark):
         return pd.read_csv(path, dtype={"code": str})
-    raw = S.tdx_daily_package(ymd)
+    try:
+        raw = S.tdx_daily_package(ymd)
+    except Exception as e:      # noqa: BLE001
+        if os.path.exists(path):
+            print(f"通达信包仍取不到（{e}），继续用备用数据")
+            return pd.read_csv(path, dtype={"code": str})
+        now = dt.datetime.now(CN)
+        if not (allow_backup and ymd == now.strftime("%Y%m%d") and now.strftime("%H%M") >= "1530"):
+            raise
+        import backup_daily as B
+        print(f"通达信盘后包取不到（{e}），改用东方财富快照")
+        st = B.em_snapshot(ymd)
+        msg = B.qq_check(st, ymd)
+        print(msg)
+        try:
+            _write_index(B.em_index(ymd), ymd, root)
+        except Exception as e2:     # noqa: BLE001
+            print("备用指数失败：", e2)
+        os.makedirs(os.path.join(root, "daily"), exist_ok=True)
+        st.to_csv(path, index=False, compression="gzip")
+        os.makedirs(os.path.dirname(mark), exist_ok=True)
+        with open(mark, "w", encoding="utf-8") as f:
+            f.write(f"eastmoney {now:%Y-%m-%d %H:%M}；{msg}\n")
+        return st
     raw["code"] = raw["code"].astype(str).str.zfill(6)
     idx = raw[[(m, c) in INDEX_KEYS for m, c in zip(raw["market"], raw["code"])]].copy()
     if len(idx):
         idx["指数"] = [INDEX_KEYS[(m, c)] for m, c in zip(idx["market"], idx["code"])]
         idx["涨跌幅"] = ((idx["close"] / idx["prev_close"] - 1) * 100).round(2)
-        os.makedirs(os.path.join(root, "index"), exist_ok=True)
-        idx[["date", "指数", "close", "涨跌幅", "amount"]].to_csv(
-            os.path.join(root, "index", f"{ymd}.csv"), index=False, encoding="utf-8-sig")
+        _write_index(idx, ymd, root)
     st = raw[[is_a_share(m, c) for m, c in zip(raw["market"], raw["code"])]]
     st = st[["date", "market", "code", "name", "prev_close", "open", "high", "low", "close", "volume", "amount"]]
+    if os.path.exists(mark):            # 备用数据换回通达信：记录两者差异
+        try:
+            old = pd.read_csv(path, dtype={"code": str}).set_index("code")
+            m = st.set_index("code").join(old[["close", "volume"]], rsuffix="_em", how="inner")
+            m = m[m.volume > 0]
+            nb = int(((m.close - m.close_em).abs() > 0.011).sum())
+            print(f"换回通达信数据：共同 {len(m)} 只，收盘价不同 {nb} 只")
+        except Exception as e:      # noqa: BLE001
+            print("对比备用数据失败：", e)
+        os.remove(mark)
     os.makedirs(os.path.join(root, "daily"), exist_ok=True)
     st.to_csv(path, index=False, compression="gzip")
     return st
+
+
+def cross_check(ymd, root):
+    """当天日线（无论来源）抽样与腾讯行情核对；只在今天收盘后有意义。"""
+    if ymd != dt.datetime.now(CN).strftime("%Y%m%d"):
+        return None
+    import backup_daily as B
+    df = pd.read_csv(os.path.join(root, "daily", f"{ymd}.csv.gz"), dtype={"code": str})
+    msg = B.qq_check(df, ymd)
+    print(msg)
+    if "未核对" in msg:
+        raise RuntimeError(msg)
+    return [msg]
 
 
 def backfill(end_ymd, n, root, q, start_ymd=None, workers=8, budget_min=300):
@@ -275,7 +328,10 @@ def main():
 
     if args.backfill or args.backfill_start:
         backfill(d, args.backfill, root, q, start_ymd=args.backfill_start or None, workers=args.workers)
-    step(q, "通达信全A日线", lambda: save_daily(d, root))
+    step(q, "通达信全A日线", lambda: save_daily(d, root, allow_backup=True))
+    if os.path.exists(os.path.join(root, "daily_src", f"{d}.txt")):
+        q[-1]["模块"] = "全A日线（备用：东方财富）"
+    step(q, "日线与腾讯交叉核对", lambda: cross_check(d, root))
     scan = step(q, "全A扫描与新鲜度", lambda: market_scan(d, root))
     if scan is not None:
         scan.to_csv(P("01_market_scan.csv"), index=False, encoding="utf-8-sig")
