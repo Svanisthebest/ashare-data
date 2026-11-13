@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 14
+CORE_VERSION = 15
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -443,7 +443,7 @@ def watch_breaks():
         if x['high'] >= up - 0.005 and x['price'] < up - 0.005 and h['code'] not in seen:
             al.append(dict(date=today, time=f'{bj_now():%H:%M:%S}', code=h['code'], name=h['name'], route=names.get(h['src'], h['src']),
                            price=x['price'], up=up, buy=h['buy_price'], pnl=round((x['price'] / h['buy_price'] - 1) * 100, 2)))
-            log(f"炸板提醒：{h['name']}（{h['code']}）冲到涨停 {up:.2f} 后打开，现价 {x['price']:.2f}，按规则立即卖出")
+            log(f"炸板提醒：{h['name']}（{h['code']}）冲到涨停 {up:.2f} 后打开，现价 {x['price']:.2f}，按规则立即卖出：挂 {math.floor(x['price']*0.995*100)/100:.2f}（现价−0.5%）限价卖，2 分钟没成交改到 {math.floor(x['price']*0.99*100)/100:.2f}（−1%）。卖得越慢，这条规则的好处越小")
     with LOCK: S['breaks'] = al
 
 
