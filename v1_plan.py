@@ -170,7 +170,7 @@ def write_helper_files(out, D):
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
     import hashlib
     h = lambda f: hashlib.sha256(open(f, 'rb').read()).hexdigest()[:16] if os.path.exists(f) else None
-    json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json', version='v1.5.1',
+    json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json', version=rules['version'],
                    csv_sha256=h(os.path.join(out, 'plan', f'{D}.csv')), rules_sha256=h(os.path.join(hp, 'rules.json')),
                    generated=dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')), open(os.path.join(hp, 'latest.json'), 'w'), ensure_ascii=False, indent=1)
 
