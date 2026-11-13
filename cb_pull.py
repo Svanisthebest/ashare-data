@@ -36,7 +36,8 @@ def one(c):
         pg+=1
     return out
 t0=time.time(); parts=[old] if old is not None else []
-with ThreadPoolExecutor(3) as ex:
+ex=ThreadPoolExecutor(3)
+if True:
     buf=[]
     for i,o in enumerate(ex.map(one,codes)):
         buf+=o
@@ -46,4 +47,4 @@ with ThreadPoolExecutor(3) as ex:
             print(i+1,f'{time.time()-t0:.0f}s',flush=True)
         if time.time()-t0>45*60: 
             if buf: parts.append(pd.DataFrame(buf)); pd.concat(parts,ignore_index=True).to_csv(OUT,index=False,compression='gzip')
-            print('时间到，下次续拉'); break
+            print('时间到，下次续拉'); ex.shutdown(wait=False,cancel_futures=True); break
