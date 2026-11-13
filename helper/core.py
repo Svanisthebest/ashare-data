@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 16
+CORE_VERSION = 17
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -571,7 +571,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="row">手动红盘率%（抓不到全市场时填，留空=自动）<input id="red" size="6"><button onclick="post('/api/orders',{red:val('red')})">生成开单单</button><span id="gate"></span></div>
 <div id="orders"></div></div>
 <div class="card"><h2>② 盘中：高标被砸挂单</h2><div id="kw" class="mute">无</div></div>
-<div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖）</h2><div id="brk" class="mute">无</div></div>
+<div class="card"><h2>②b 盘中：持仓炸板提醒（10:30 后冲到涨停又打开 → 立即卖；首板强势未封低开、低位启动、2板断板强收、恐慌低吸不做这条）</h2><div id="brk" class="mute">无</div></div>
 <div class="card"><h2>③ 14:55 卖出检查（自动，也可手动）；要卖的 14:57 起在收盘集合竞价挂单</h2><button onclick="post('/api/sells')">现在检查</button> <span id="zz" class="mute"></span><div id="sells"></div></div>
 <div class="card"><h2>持仓（只存在本机）</h2><div id="hold"></div>
 <div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="11" placeholder="如 20261110 或 11-10"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
