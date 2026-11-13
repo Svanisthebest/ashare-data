@@ -15,7 +15,7 @@ import numpy as np, pandas as pd
 
 START = '20261102'; CAP = {'N': 2, 'P': 2, 'Q': 2, 'K': 2, 'D': 3, 'Y': 2}
 W = {'LD': 0.30, 'L': 0.25, 'M': 0.25, 'N': 0.30, 'B': 0.20, 'K': 0.20, 'D': 0.25, 'P': 0.15, 'Q': 0.15, 'Y': 0.15}
-ORDER = ['LD', 'L', 'M', 'N', 'B', 'K', 'D', 'P', 'Q', 'Y']
+ORDER = ['LD', 'L', 'M', 'N', 'B', 'K', 'D', 'Q', 'Y', 'P']   # v1.5.2：P 排最后
 NAME = {'B': '恐慌低吸', 'RB': '跌深反弹（v1.3 已停用）', 'L': '2板龙头', 'LD': '总龙头强势首阴', 'C': '强势回调（v1.3 已停用）', 'D': '低位启动',
         'A': '低位跟随（v1.3 已停用）', 'M': '周一放宽', 'K': '高标被砸', 'N': '缩量断板低开', 'P': '首板强势未封低开', 'Q': '2板断板强收', 'Y': '炸板弱转强', 'T': '试验仓（v1 已停用）'}
 
@@ -56,7 +56,7 @@ def main():
     plan_f = os.path.join(root, 'plan', f'{P}.csv')
     cand = pd.read_csv(plan_f, dtype={'代码': str}) if os.path.exists(plan_f) else pd.DataFrame(columns=['src', '代码', '名称'])
     friday = pd.Timestamp(P).weekday() == 4
-    allowed = (set(ORDER) - {'K', 'M'}) if red > 0.55 else ({'LD', 'K', 'N', 'P', 'Q', 'Y'} | ({'M'} if friday else set())) if red >= 0.40 else {'LD', 'K', 'N', 'P', 'Q', 'Y'}   # 与回测一致：周一放宽只在 40–55%；N、P 不受开关限制
+    allowed = (set(ORDER) - {'K', 'M', 'P'}) if red > 0.55 else ({'LD', 'K', 'N', 'P', 'Q', 'Y'} | ({'M'} if friday else set())) if red >= 0.40 else {'LD', 'K', 'N', 'P', 'Q', 'Y'}   # 与回测一致：周一放宽只在 40–55%；N、P 不受开关限制
     zf = os.path.join(root, 'index', f'{D}.csv')
     zr = float(pd.read_csv(zf).set_index('指数').loc['中证1000', '涨跌幅']) / 100 if os.path.exists(zf) else 0.0   # 中证1000 当天涨跌
     buys, skips, auc_note = [], [], []
@@ -113,7 +113,7 @@ def main():
         locked = cl <= t.loc[c, 'dn'] + 0.005          # 收盘封在跌停：尾盘卖不出，按卖不出处理（比回测保守）；盘中 10:30 后炸板卖不受影响
         zt = cl >= t.loc[c, 'up'] - 0.005; dr = cl / t.loc[c, 'prev_close'] - 1; L = t.loc[c, 'lim']
         why = None; sp = cl
-        if p['entry'] != D and not yz_locked and p['src'] not in ('B', 'RB'):
+        if p['entry'] != D and not yz_locked and p['src'] not in ('B', 'RB', 'P', 'D', 'Q'):   # v1.5.2：P、D、Q 不做炸板卖
             g = M5.get(c)
             if g is None or len(g) < 40: no_m5.append(p['name'])
             else:
@@ -131,7 +131,8 @@ def main():
             elif p['src'] not in ('RB', 'B') and not zt:
                 if p['src'] == 'LD' and dr >= 0.7 * L and p['extra'] < 3: p['extra'] += 1
                 elif cl < p['ep'] and zr <= -0.01 and not p.get('delayed'): p['delayed'] = 1; p['note'] = '亏损且中证1000 跌 ≥ 1%，推迟一天卖'
-                elif p['src'] != 'LD' and L < 0.15 and dr >= 0.7 * L and p['extra'] < 1: p['extra'] += 1; p['note'] = f'10cm 涨 {dr:.1%} 没封，多拿一天'   # v1.5.1
+                elif p['src'] != 'LD' and dr >= 0.7 * L and p['extra'] < 1: p['extra'] += 1; p['note'] = f'{"20cm" if L > 0.15 else "10cm"} 涨 {dr:.1%} 没封，多拿一天'   # v1.5.2：20cm 同样适用
+                elif p['src'] == 'D' and p['held'] < 3: p['note'] = '低位启动至少拿 2 天'   # v1.5.2：买入后第 1 个交易日不卖（held 买入日=1）
                 else: why = '没涨停，尾盘卖'
             if why is None and p['src'] not in ('RB', 'B') and p['held'] >= 11: why = '拿满 11 天'
         if why:
@@ -163,7 +164,7 @@ def main():
         L_ += ['| 路线 | 名称 | 买入日 | 买入价 | 今收 | 浮动 | 下一步 |', '|---|---|---|---|---|---|---|']
         for p in book['pos']:
             note_ = p.pop('note', None)
-            nxt = (note_ + '，明天不涨停就尾盘卖') if note_ and note_.startswith('10cm') else '亏损且中证1000 跌 ≥ 1%，推迟到明天尾盘卖' if note_ else f"拿满 5 天（已 {p['held']} 天）" if p['src'] == 'RB' else ('高点回撤 10% 卖' if p['src'] == 'B' else ('明天不涨停且涨不到 7%（20cm 14%）就尾盘卖' if p['src'] == 'LD' else '明天不涨停就尾盘卖'))
+            nxt = (note_ + '，明天不涨停就尾盘卖') if note_ and (note_.startswith('10cm') or note_.startswith('20cm') or note_.startswith('低位启动')) else '亏损且中证1000 跌 ≥ 1%，推迟到明天尾盘卖' if note_ else f"拿满 5 天（已 {p['held']} 天）" if p['src'] == 'RB' else ('高点回撤 10% 卖' if p['src'] == 'B' else ('明天不涨停且涨不到 7%（20cm 14%）就尾盘卖' if p['src'] == 'LD' else '明天不涨停就尾盘卖'))
             L_.append(f"| {NAME[p['src']]} | {p['name']} | {p['entry']} | {p['ep']:.2f} | {p['last']:.2f} | {p['last'] / p['ep'] - 1:+.1%} | {nxt} |")
     else: L_.append('- 空仓')
     L_ += ['', f'明天开仓前先扣掉以上持仓：已占 {len(book["pos"])} / 5 个仓位。']
