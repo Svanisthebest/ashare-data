@@ -3,8 +3,8 @@
  "csv": "data/plan/20261113.csv",
  "md": "data/plan/20261113.md",
  "rules": "data/helper/rules.json",
- "version": "v1.5.1",
+ "version": "v1.5.2",
  "csv_sha256": "fab0899365fc3e72",
  "rules_sha256": "c97f84573d593e47",
- "generated": "2026-11-13 14:53 UTC"
+ "generated": "2026-11-13 14:58 UTC"
 }
