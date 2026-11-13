@@ -20,6 +20,7 @@ jobs:
             data/daily
             data/theme/boards.csv
             backup_daily.py
+            probe_hist_sample.csv
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
