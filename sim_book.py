@@ -109,10 +109,11 @@ def main():
         c = p['code']; cl = px(c, 'close')
         if cl is None: keep.append(p); continue          # 停牌
         p['held'] += 1; p['peak'] = max(p['peak'], cl)
-        locked = t.loc[c, 'high'] == t.loc[c, 'low'] and cl <= t.loc[c, 'dn'] + 0.005
+        yz_locked = t.loc[c, 'high'] == t.loc[c, 'low'] and cl <= t.loc[c, 'dn'] + 0.005   # 一字跌停：全天卖不出
+        locked = cl <= t.loc[c, 'dn'] + 0.005          # 收盘封在跌停：尾盘卖不出，按卖不出处理（比回测保守）；盘中 10:30 后炸板卖不受影响
         zt = cl >= t.loc[c, 'up'] - 0.005; dr = cl / t.loc[c, 'prev_close'] - 1; L = t.loc[c, 'lim']
         why = None; sp = cl
-        if p['entry'] != D and not locked and p['src'] not in ('B', 'RB'):
+        if p['entry'] != D and not yz_locked and p['src'] not in ('B', 'RB'):
             g = M5.get(c)
             if g is None or len(g) < 40: no_m5.append(p['name'])
             else:
@@ -120,6 +121,7 @@ def main():
                 for tt, h, c5 in zip(g.time.str.zfill(4), g.high.astype(float), g.close.astype(float)):
                     if h >= up - 0.005: touched = True
                     if touched and c5 < up - 0.005 and tt >= '1030': why = f'10:30 后冲到涨停又打开，{tt[:2]}:{tt[2:]} 卖'; sp = c5; break
+        if why is None and p['entry'] != D and locked: p['note'] = '收盘封在跌停卖不出，明天 14:55 再判断'
         if why is None and p['entry'] != D and not locked:
             cs = 0.15 if p['src'] in ('B', 'RB') else 0.08
             if cl < p['ep'] * (1 - cs): why = f'收盘亏超 {cs:.0%} 止损'

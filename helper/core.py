@@ -15,7 +15,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 13
+CORE_VERSION = 14
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -394,7 +394,7 @@ def build_sells():
         try: n = held_days(norm_date(h['entry'], today), today)
         except Exception: r.update(action='?', why=f'买入日「{h["entry"]}」格式不对，请点「修改」改成 20261110 这样的格式'); continue
         r.update(price=p, ret=round(ret * 100, 2), pnl=round(pnl * 100, 2), days=n)
-        if p <= dn + 0.005 and x.get('high') == x.get('low'): r.update(action='卖不出', why='跌停封死，明天开盘卖'); continue
+        if p <= dn + 0.005 and x.get('high') == x.get('low'): r.update(action='卖不出', why='一字跌停封死，可挂跌停价排队碰运气；没成交就明天 14:55 按规则再判断（不要开盘割肉：回测里次日开盘卖平均比尾盘差）'); continue
         zt = p >= up - 0.005
         if s == 'B':
             peak = max(h.get('peak', h['buy_price']), p)
@@ -404,7 +404,7 @@ def build_sells():
             else: r.update(action='持有', why=f'恐慌低吸：高点 {peak:.2f}，跌破 {peak * 0.9:.2f} 再卖', set=dict(peak=peak))
             continue
         if pnl < -sl.get('stop', 0.08):
-            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn + 0.01, 2)); r.update(action='卖出', limit=lp, why=f'亏 {pnl:.1%}，超过 8% 止损；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出'); continue
+            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn, 2)); r.update(action='卖出', limit=lp, why=f'亏 {pnl:.1%}，超过 8% 止损；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出' + ('。⚠ 现在封在跌停：立刻挂跌停价排队（越早越靠前），成交不了就明天 14:55 按规则再判断' if p <= dn + 0.005 else '')); continue
         if zt: act, why, st = '持有', '涨停，继续拿', {}
         elif s == 'LD' and ret >= sl.get('LD_extra_ratio', 0.7) * lim and h.get('extra', 0) < sl.get('LD_extra_max', 3):
             act, why, st = '持有', f'总龙头首阴涨 {ret:.1%}（≥ 涨停幅 70%），多拿一天（第 {h.get("extra", 0) + 1} 次）', dict(extra=h.get('extra', 0) + 1)
@@ -415,8 +415,9 @@ def build_sells():
         else: act, why, st = '卖出', '没涨停，尾盘卖', {}
         if act != '卖出' and n >= sl.get('max_days', 11): act, why, st = '卖出', f'已拿 {n} 天，到期', {}
         if act == '卖出':
-            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn + 0.01, 2))
+            lp = max(math.floor(p * 0.97 * 100) / 100, round(dn, 2))
             r['limit'] = lp; why += f'；14:57–15:00 收盘集合竞价挂 {lp:.2f} 卖出（按收盘价成交）'
+            if p <= dn + 0.005: why += '。⚠ 现在封在跌停：立刻挂跌停价排队（越早越靠前），成交不了就明天 14:55 按规则再判断'
         r.update(action=act, why=why, set=st)
     with LOCK:
         S['sells'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, zz1000=round(zr * 100, 2), rows=rows); S['sells_date'] = today
