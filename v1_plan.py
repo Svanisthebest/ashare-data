@@ -46,7 +46,7 @@ NAME = {'B': '恐慌低吸', 'L': '2板龙头', 'LD': '总龙头强势首阴', '
         'N': '缩量断板低开', 'P': '首板强势未封低开', 'Q': '2板断板强收', 'Y': '炸板弱转强'}
 ORDER = ['LD', 'L', 'M', 'N', 'B', 'K', 'D', 'Q', 'Y', 'P']   # v1.5.2：首板强势未封低开排最后
 CAP = {'N': 2, 'P': 2, 'Q': 2, 'K': 2, 'D': 3, 'Y': 2}
-SIZE = {'LD': 30, 'L': 25, 'M': 25, 'N': 30, 'B': 20, 'K': 20, 'D': 25, 'P': 15, 'Q': 15, 'Y': 15}
+SIZE = {'LD': 30, 'L': 25, 'M': 25, 'N': 30, 'B': 20, 'K': 20, 'D': 25, 'P': 20, 'Q': 20, 'Y': 20}   # v1.5.3：P/Q/Y 15% → 20%
 
 
 def sealed_minutes(codes, D, ups):
@@ -151,7 +151,7 @@ def write_helper_files(out, D):
     """给电脑端开单助手用：规则参数（与本脚本、sim_book.py 一致）和最新计划的位置。模型升级时只改这里，助手启动时自动读取。"""
     import json
     hp = os.path.join(out, 'helper'); os.makedirs(hp, exist_ok=True)
-    rules = dict(version='v1.5.2', min_core=16, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
+    rules = dict(version='v1.5.3', min_core=16, max_positions=5, order=ORDER, names=NAME, size=SIZE, cap=CAP,
                  gate=dict(high=0.55, low=0.40,
                            allowed_high=[s for s in ORDER if s not in ('K', 'M', 'P')],   # v1.5.2：红盘率 > 55% 时不做首板强势未封低开
                            allowed_mid=['LD', 'K', 'N', 'P', 'Q', 'M', 'Y'],
@@ -166,7 +166,8 @@ def write_helper_files(out, D):
                            LD_extra_ratio=0.7, LD_extra_max=3, delay_index_drop=-0.01, delay_once=True, break_after='10:30', break_exempt=['B', 'P', 'D', 'Q'], check_time='14:55', order='closing_auction', extra_all_ratio=0.7, extra_all_max=1, extra_all_20cm=True, min_hold={'D': 2}),
                  notes=['Y（炸板弱转强）：竞价高开 ≥3% 且 竞价成交额是近 5 日平均成交额的 3%–10% 才开盘买；N、P、Q 只在低开 0–5% 时开盘买；K 开盘在昨收 −3%~0 时挂开盘价×0.97，收盘前未成交撤单',
                         '卖出：10:30 后冲到涨停又打开就立即卖（首板强势未封低开、低位启动、2板断板强收、恐慌低吸不做这条）；其余 14:55 判定、不涨停就在 14:57–15:00 收盘集合竞价卖（按收盘价成交）；亏 8% 止损；总龙头首阴涨 ≥ 7%（20cm ≥ 14%）可多拿最多 3 天；其他路线涨 ≥ 涨停幅 70%（10cm ≥7%、20cm ≥14%）没封也多拿 1 天；低位启动买入后第 1 个交易日不卖（除非止损），第 2 个交易日起按规则；亏损且中证1000 跌 ≥ 1% 推迟一天',
-                        'v1.5.2：红盘率 > 55% 时不做首板强势未封低开；首板强势未封低开排在买入顺序最后'])
+                        'v1.5.2：红盘率 > 55% 时不做首板强势未封低开；首板强势未封低开排在买入顺序最后',
+                        'v1.5.3（2026-11-17 起）：首板强势未封低开、2板断板强收、炸板弱转强每笔 15% → 20%'])
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
     import hashlib
     h = lambda f: hashlib.sha256(open(f, 'rb').read()).hexdigest()[:16] if os.path.exists(f) else None
@@ -300,7 +301,7 @@ def main():
             e = str(cc['错误'].iloc[0]); src_txt += '；与腾讯行情抽样核对：' + ('未核对（腾讯行情取不到）' if '未核对' in e else '⚠ 不一致，' + e.split(': ', 1)[-1][:120])
     except Exception: pass
     # 写计划
-    L = [f'# v1.5.2 计划：{d} 收盘 → {nxt}', '',
+    L = [f'# v1.5.3 计划：{d} 收盘 → {nxt}', '',
          f'- 数据：{src_txt}。',
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
          f'- 量能：{vol_txt}。大票缩量上涨一般走不远，明显放量的上涨才有延续性（仅供参考）。',
