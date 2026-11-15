@@ -169,10 +169,18 @@ def write_helper_files(out, D):
                         'v1.5.2：红盘率 > 55% 时不做首板强势未封低开；首板强势未封低开排在买入顺序最后',
                         'v1.5.3（2026-11-16 起）：首板强势未封低开、2板断板强收、炸板弱转强每笔 15% → 20%'])
     json.dump(rules, open(os.path.join(hp, 'rules.json'), 'w'), ensure_ascii=False, indent=1)
+    # 开单工具 v18：全 A 代码表（沪深、不含北交所），东方财富全市场行情取不到时改用腾讯行情逐批取，算竞价红盘率
+    try:
+        fd = os.path.join(out, 'daily', f'{D}.csv.gz')
+        u = pd.read_csv(fd, dtype={'code': str}, usecols=['code', 'market'])
+        u = u[u.market.isin(['sh', 'sz']) & ~u.code.str.match(r'^(4|8|92)')]
+        open(os.path.join(hp, 'universe.txt'), 'w').write('\n'.join(sorted(u.market + u.code)) + '\n')
+    except Exception as e:
+        print('全 A 代码表没写成：', e)
     import hashlib
     h = lambda f: hashlib.sha256(open(f, 'rb').read()).hexdigest()[:16] if os.path.exists(f) else None
     json.dump(dict(plan_date=D, csv=f'data/plan/{D}.csv', md=f'data/plan/{D}.md', rules='data/helper/rules.json', version=rules['version'],
-                   csv_sha256=h(os.path.join(out, 'plan', f'{D}.csv')), rules_sha256=h(os.path.join(hp, 'rules.json')),
+                   csv_sha256=h(os.path.join(out, 'plan', f'{D}.csv')), rules_sha256=h(os.path.join(hp, 'rules.json')), universe='data/helper/universe.txt',
                    generated=dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')), open(os.path.join(hp, 'latest.json'), 'w'), ensure_ascii=False, indent=1)
 
 

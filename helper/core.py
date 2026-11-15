@@ -11,11 +11,12 @@ A股短线开单助手（核心程序）。由 launcher.py 启动时从仓库下
 只用 Python 标准库。仅供参考，不构成投资建议；下单以券商软件为准。
 """
 import csv, io, json, math, os, sys, threading, time, traceback, webbrowser
+from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 17
+CORE_VERSION = 18
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -135,30 +136,94 @@ def _mock_rows():
     return rows
 
 
-def quotes_all():
-    """东方财富全市场（沪深京 A 股）今开 / 昨收 / 现价 / 最高 / 最低。返回 {code: {...}}"""
-    if MOCK: return _mock_rows()
-    rows = {}; hosts = ['push2', '82.push2', '72.push2', '7.push2', '28.push2']
+QSRC = {'src': ''}   # v18：最近一次全市场行情来自哪里
+
+
+def _em_row(x):
+    f = lambda k: float(x[k]) if x.get(k) not in ('-', None, '') else 0.0
+    return dict(code=str(x['f12']), name=x.get('f14', ''), open=f('f17'), pc=f('f18'), price=f('f2'), high=f('f15'), low=f('f16'), amount=f('f6'))
+
+
+def _em_all(budget=20):
+    """东方财富全市场：先试一次取全部（部分节点允许大页），不够再 100 只一页翻，总共最多 budget 秒。"""
+    rows = {}; hosts = ['push2', '82.push2', '72.push2', '7.push2', '28.push2']; t0 = time.time()
+    base = dict(po=1, np=1, fltt=2, invt=2, fid='f12', fs='m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048',
+                fields='f12,f14,f17,f18,f2,f15,f16,f6', ut='bd1d9ddb04089700cf9c27f6f7426281')
+    for h in hosts[:3]:
+        try:
+            d = (json.loads(http_get(f'https://{h}.eastmoney.com/api/qt/clist/get', dict(base, pn=1, pz=6000), timeout=8, tries=1)) or {}).get('data') or {}
+            diff = d.get('diff') or []
+            if isinstance(diff, dict): diff = list(diff.values())
+            for x in diff:
+                try: rows[str(x['f12'])] = _em_row(x)
+                except Exception: pass
+            if d.get('total') and len(rows) >= 0.98 * d['total']: return rows
+        except Exception: pass
+        if time.time() - t0 > budget / 3: break
     for pn in range(1, 80):
-        p = dict(pn=pn, pz=100, po=1, np=1, fltt=2, invt=2, fid='f12', fs='m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048',
-                 fields='f12,f14,f17,f18,f2,f15,f16,f6', ut='bd1d9ddb04089700cf9c27f6f7426281')
+        if time.time() - t0 > budget: break
         j = None
-        for t in range(4):
+        for t in range(3):
             try:
-                j = json.loads(http_get(f'https://{hosts[(pn + t) % len(hosts)]}.eastmoney.com/api/qt/clist/get', p, tries=1)); break
-            except Exception: time.sleep(1 + t)
+                j = json.loads(http_get(f'https://{hosts[(pn + t) % len(hosts)]}.eastmoney.com/api/qt/clist/get', dict(base, pn=pn, pz=100), timeout=6, tries=1)); break
+            except Exception: time.sleep(0.5 + t)
         d = (j or {}).get('data') or {}; diff = d.get('diff') or []
         if isinstance(diff, dict): diff = list(diff.values())
         if not diff: break
         for x in diff:
-            try:
-                rows[str(x['f12'])] = dict(code=str(x['f12']), name=x.get('f14', ''), open=float(x['f17']) if x['f17'] not in ('-', None) else 0.0,
-                                           pc=float(x['f18']) if x['f18'] not in ('-', None) else 0.0, price=float(x['f2']) if x['f2'] not in ('-', None) else 0.0,
-                                           high=float(x['f15']) if x['f15'] not in ('-', None) else 0.0, low=float(x['f16']) if x['f16'] not in ('-', None) else 0.0,
-                                           amount=float(x['f6']) if x.get('f6') not in ('-', None) else 0.0)
+            try: rows[str(x['f12'])] = _em_row(x)
             except Exception: pass
         if len(rows) >= d.get('total', 0): break
-        time.sleep(0.2)
+        time.sleep(0.15)
+    return rows
+
+
+def _qq_batch(sym):
+    out = {}
+    txt = http_get('https://qt.gtimg.cn/q=' + ','.join(sym), enc='gbk', timeout=6, tries=2)
+    for line in txt.strip().split(';'):
+        if '="' not in line: continue
+        k, v = line.split('="', 1); f = v.strip('"\n').split('~')
+        if len(f) < 35: continue
+        try: out[k[-6:]] = dict(code=k[-6:], name=f[1], price=float(f[3] or 0), pc=float(f[4] or 0), open=float(f[5] or 0), high=float(f[33] or 0),
+                                low=float(f[34] or 0), amount=float(f[37] or 0) * 1e4 if len(f) > 37 else 0.0, date=f[30][:8])
+        except Exception: pass
+    return out
+
+
+def _qq_all():
+    """腾讯行情：按仓库里的全 A 代码表（每晚随计划更新）60 只一批、8 线程并发取。"""
+    key = (S.get('latest') or {}).get('universe') or 'data/helper/universe.txt'
+    if S.get('_univ_key') != (key, (S.get('latest') or {}).get('plan_date')):
+        S['_univ'] = [x.strip() for x in repo_get(key).split() if len(x.strip()) == 8]
+        S['_univ_key'] = (key, (S.get('latest') or {}).get('plan_date'))
+    sym = S.get('_univ') or []
+    if len(sym) < 3000: raise RuntimeError(f'全 A 代码表只有 {len(sym)} 只')
+    rows = {}; parts = [sym[i:i + 60] for i in range(0, len(sym), 60)]
+    def one(b):
+        try: return _qq_batch(b)
+        except Exception: return {}
+    with ThreadPoolExecutor(8) as ex:
+        for r in ex.map(one, parts): rows.update(r)
+    return rows
+
+
+def quotes_all():
+    """全市场（沪深 A 股）今开 / 昨收 / 现价 / 最高 / 最低。返回 {code: {...}}。
+    v18：先东方财富（大页 → 翻页，限时）；不足 4000 只就改用腾讯行情（按全 A 代码表多线程取）。"""
+    if MOCK: QSRC['src'] = '模拟'; return _mock_rows()
+    t0 = time.time(); err = []
+    try: rows = _em_all()
+    except Exception as e: rows = {}; err.append(f'东方财富：{str(e)[:60]}')
+    if len(rows) >= 4000:
+        QSRC['src'] = f'东方财富 {len(rows)} 只，{time.time() - t0:.0f} 秒'; return rows
+    n_em = len(rows)
+    try:
+        q = _qq_all()
+        if len(q) > len(rows): rows = q
+        QSRC['src'] = f'腾讯 {len(q)} 只（东方财富只取到 {n_em} 只），{time.time() - t0:.0f} 秒'
+    except Exception as e:
+        err.append(f'腾讯：{str(e)[:60]}'); QSRC['src'] = f'东方财富 {n_em} 只；' + '；'.join(err)
     return rows
 
 
@@ -293,7 +358,7 @@ def build_orders(red_override=None):
     red = red_override
     if red is None:
         univ = [q for q in allq.values() if not q['code'].startswith(('4', '8', '92')) and 'ST' not in q['name'] and '退' not in q['name'] and q['open'] > 0 and q['pc'] > 0]
-        if len(univ) < 3000: raise RuntimeError(f'全市场行情只有 {len(univ)} 只，算不了红盘率；可以在页面上手动填写红盘率')
+        if len(univ) < 3000: raise RuntimeError(f'全市场行情只有 {len(univ)} 只（{QSRC["src"]}），算不了红盘率；会每 20 秒自动重试到 9:31，也可以在页面上手动填写红盘率')
         red = sum(q['open'] > q['pc'] for q in univ) / len(univ)
     some = quotes_some(list({c['代码'] for c in cand} | {h['code'] for h in S['holdings']}))
     sd = stale_quotes(some, today)
@@ -366,7 +431,7 @@ def build_orders(red_override=None):
             except Exception: pass
             cash -= sh * px; npos += 1; held.add(code); per[s] = per.get(s, 0) + 1
     with LOCK:
-        S['orders'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, red=round(red, 4), gate=gate_txt, red_src='手动' if red_override is not None else '全市场竞价',
+        S['orders'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, red=round(red, 4), gate=gate_txt, red_src='手动' if red_override is not None else f"全市场竞价（{QSRC['src']}）",
                            allowed=[R['names'][x] for x in R['order'] if x in allowed], equity=equity, cash_left=round(cash, 2), rows=out)
         S['orders_date'] = today
     save_state(); log(f'开单单已生成：红盘率 {red:.1%}（{gate_txt}），买入 {sum(r["action"] != "不买" for r in out)} 只')
@@ -468,9 +533,13 @@ def scheduler():
         try:
             now = bj_now(); today = now.strftime('%Y%m%d'); hm = now.strftime('%H%M'); wk = now.weekday() < 5
             if time.time() - last_plan > (300 if S.get('plan_err') else 600 if '0900' <= hm <= '0930' else 3600): refresh_plan(); last_plan = time.time()
-            if wk and '0925' <= hm < '0931' and S.get('orders_date') != today and (hm >= '0926' or now.second >= 15):
+            if wk and '0925' <= hm < '0931' and S.get('orders_date') != today and (hm >= '0926' or now.second >= 15) and time.time() >= S.get('_ord_next', 0):
                 try: build_orders()
-                except Exception as e: log(f'自动生成开单单失败：{e}（可在页面手动填写红盘率后生成）'); S['orders_date'] = today + '_fail'
+                except Exception as e:
+                    S['_ord_next'] = time.time() + 20
+                    if hm >= '0930' and now.second >= 30:
+                        log(f'自动生成开单单失败：{e}（已重试到 9:30，请在页面手动填写红盘率后生成）'); S['orders_date'] = today + '_fail'
+                    else: log(f'自动生成开单单这次没成功：{e}；20 秒后自动重试')
             if wk and '1455' <= hm < '1500' and S.get('sells_date') != today:
                 try: build_sells()
                 except Exception as e: log(f'卖出检查失败：{e}'); S['sells_date'] = today + '_fail'
