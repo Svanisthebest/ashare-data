@@ -59,7 +59,7 @@ def run():
     setup()
     now = core.bj_now(); today = now.strftime('%Y%m%d')
     if now.weekday() >= 5: print('周末，不运行'); return
-    if now.strftime('%H%M') >= '1500': print('已经收盘，不运行'); return
+    if now.strftime('%H%M') >= '1450': print('已经接近收盘（可能是排队的重复运行），不运行'); return
     try:
         days = core.trade_days()
         if days and today not in days and max(days) >= today: print('今天不是交易日，不运行'); return
