@@ -16,7 +16,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 18
+CORE_VERSION = 19
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -72,7 +72,7 @@ def norm_date(x, today=None):
 
 def save_state():
     with LOCK:
-        keep = {k: S.get(k) for k in ['equity', 'holdings', 'history', 'mirror', 'orders', 'sells', 'manual_red', 'orders_date', 'sells_date']}
+        keep = {k: S.get(k) for k in ['equity', 'holdings', 'history', 'mirror', 'orders', 'sells', 'manual_red', 'orders_date', 'sells_date', 'push', 'pushed']}
         tmp = STATE_F + '.tmp'; json.dump(keep, open(tmp, 'w', encoding='utf-8'), ensure_ascii=False, indent=1); os.replace(tmp, STATE_F)
 
 
@@ -134,6 +134,80 @@ def _mock_rows():
         try: rows[r['code']] = dict(code=r['code'], name=r['name'], open=float(r['open']), pc=float(r['prev_close']), price=float(r['close']), high=float(r['high']), low=float(r['low']), amount=float(r.get('amount') or 0), date=d)
         except Exception: pass
     return rows
+
+
+# ------------------------------------------------------------------ v19：手机推送
+def _push_channel(dest):
+    d = (dest or '').strip()
+    if not d: return None
+    if 'qyapi.weixin.qq.com' in d: return 'wecom'
+    if 'oapi.dingtalk.com' in d: return 'dingtalk'
+    if 'open.feishu.cn' in d or 'larksuite.com' in d: return 'feishu'
+    if 'day.app' in d or '/bark' in d.lower(): return 'bark'
+    if d.upper().startswith('SCT') and '://' not in d: return 'serverchan'
+    if '://' not in d and len(d) >= 20: return 'pushplus'
+    if d.startswith('http'): return 'webhook'
+    return None
+
+
+def _http_post(url, data, form=False, timeout=8):
+    body = urllib.parse.urlencode(data).encode() if form else json.dumps(data, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(url, data=body, headers={'User-Agent': UA.get('User-Agent', 'Mozilla/5.0'),
+                                 'Content-Type': 'application/x-www-form-urlencoded' if form else 'application/json; charset=utf-8'})
+    return urllib.request.urlopen(req, timeout=timeout).read().decode('utf-8', errors='replace')
+
+
+def push_send(title, body, dest=None):
+    """发一条推送到手机，返回 (成功, 说明)。不在后台线程里调用时会阻塞几秒。"""
+    dest = (dest if dest is not None else S.get('push') or '').strip(); ch = _push_channel(dest)
+    if not ch: return False, '没有设置推送'
+    title = '【A股】' + title; text = title + '\n' + body
+    try:
+        if ch == 'pushplus': r = _http_post('https://www.pushplus.plus/send', dict(token=dest, title=title, content=body, template='txt'))
+        elif ch == 'serverchan': r = _http_post(f'https://sctapi.ftqq.com/{dest}.send', dict(title=title, desp=body.replace('\n', '\n\n')), form=True)
+        elif ch == 'bark': r = _http_post(dest.rstrip('/'), dict(title=title, body=body, group='A股', level='timeSensitive'))
+        elif ch == 'wecom': r = _http_post(dest, dict(msgtype='text', text=dict(content=text)))
+        elif ch == 'dingtalk': r = _http_post(dest, dict(msgtype='text', text=dict(content=text)))
+        elif ch == 'feishu': r = _http_post(dest, dict(msg_type='text', content=dict(text=text)))
+        else: r = _http_post(dest, dict(title=title, content=body))
+        try: j = json.loads(r)
+        except Exception: j = {}
+        if ch in ('pushplus', 'bark'): ok = j.get('code') == 200
+        elif ch == 'serverchan': ok = j.get('code') == 0
+        elif ch in ('wecom', 'dingtalk'): ok = j.get('errcode') == 0
+        elif ch == 'feishu': ok = j.get('code', j.get('StatusCode')) == 0
+        else: ok = True
+        return ok, (r[:120] if not ok else 'ok')
+    except Exception as e:
+        return False, str(e)[:120]
+
+
+def push(title, body, key=None):
+    """后台发送，不耽误开单；key 用于同一件事一天只推一次。"""
+    if not _push_channel(S.get('push')) or MOCK and not os.environ.get('ASH_PUSH_TEST'): return
+    today = bj_now().strftime('%Y%m%d')
+    if key:
+        pp = S.setdefault('pushed', {})
+        if pp.get('date') != today: pp.clear(); pp['date'] = today
+        if pp.get(key): return
+        pp[key] = 1
+    def run():
+        ok, msg = push_send(title, body)
+        if not ok:
+            time.sleep(3); ok, msg = push_send(title, body)
+        log(f'手机推送{"成功" if ok else "失败"}：{title}' + ('' if ok else f'（{msg}）'))
+    threading.Thread(target=run, daemon=True).start()
+
+
+def push_orders(o):
+    buys = [r for r in o['rows'] if r['action'] != '不买']
+    lines = [f"红盘率 {o['red']:.1%}（{o['gate']}），{o.get('red_src', '')}"]
+    for r in buys:
+        if r['action'] == '挂单': lines.append(f"挂单 {r['route']} {r['name']} {r['code']}：挂 {r.get('limit')} 买 {r.get('shares')} 股，收盘前没成交撤单")
+        else: lines.append(f"买 {r['route']} {r['name']} {r['code']}：挂 {r.get('limit')} 买 {r.get('shares')} 股（约 {r.get('amount')} 元）")
+    if not buys: lines.append('今天没有符合条件的买入')
+    lines.append(f"开单后剩余可用约 {o.get('cash_left')} 元；9:30 没成交最多改到 +1%，再高就放弃")
+    push(f"9:25 开单单：买 {len(buys)} 只", '\n'.join(lines), key='orders')
 
 
 QSRC = {'src': ''}   # v18：最近一次全市场行情来自哪里
@@ -435,6 +509,8 @@ def build_orders(red_override=None):
                            allowed=[R['names'][x] for x in R['order'] if x in allowed], equity=equity, cash_left=round(cash, 2), rows=out)
         S['orders_date'] = today
     save_state(); log(f'开单单已生成：红盘率 {red:.1%}（{gate_txt}），买入 {sum(r["action"] != "不买" for r in out)} 只')
+    try: push_orders(S['orders'])
+    except Exception as e: log(f'推送开单单出错：{e}')
 
 
 # ------------------------------------------------------------------ 14:55 卖出检查（v7：从 14:47 推迟，判定更接近收盘，与回测一致）
@@ -489,6 +565,14 @@ def build_sells():
     with LOCK:
         S['sells'] = dict(time=f'{bj_now():%H:%M:%S}', date=today, zz1000=round(zr * 100, 2), rows=rows); S['sells_date'] = today
     save_state(); log(f'卖出检查：{sum(r.get("action") == "卖出" for r in rows)} 只要卖，中证1000 {zr:+.2%}')
+    try:
+        if rows:
+            ls = [f"中证1000 {zr:+.2%}；要卖的 14:57–15:00 在收盘集合竞价挂单"]
+            for r in rows:
+                a = r.get('action'); tail = f"挂 {r['limit']:.2f} 卖 {r['shares']} 股" if a == '卖出' and r.get('limit') else ''
+                ls.append(f"{a} {r['route']} {r['name']} {r['code']}{('（现价 ' + str(r['price']) + '，盈亏 ' + str(r.get('pnl')) + '%）') if r.get('price') else ''}：{tail + '；' if tail else ''}{r.get('why', '')}")
+            push(f"14:55 卖出检查：卖 {sum(r.get('action') == '卖出' for r in rows)} 只", '\n'.join(ls), key='sells')
+    except Exception as e: log(f'推送卖出检查出错：{e}')
 
 
 def watch_breaks():
@@ -511,6 +595,7 @@ def watch_breaks():
             al.append(dict(date=today, time=f'{bj_now():%H:%M:%S}', code=h['code'], name=h['name'], route=names.get(h['src'], h['src']),
                            price=x['price'], up=up, buy=h['buy_price'], pnl=round((x['price'] / h['buy_price'] - 1) * 100, 2)))
             log(f"炸板提醒：{h['name']}（{h['code']}）冲到涨停 {up:.2f} 后打开，现价 {x['price']:.2f}，按规则立即卖出：挂 {math.floor(x['price']*0.995*100)/100:.2f}（现价−0.5%）限价卖，2 分钟没成交改到 {math.floor(x['price']*0.99*100)/100:.2f}（−1%）。卖得越慢，这条规则的好处越小")
+            push(f"炸板，立即卖：{h['name']}", f"{h['name']}（{h['code']}）冲到涨停 {up:.2f} 后打开，现价 {x['price']:.2f}\n立即挂 {math.floor(x['price']*0.995*100)/100:.2f} 卖 {h['shares']} 股；2 分钟没成交改到 {math.floor(x['price']*0.99*100)/100:.2f}", key='brk_' + h['code'])
     with LOCK: S['breaks'] = al
 
 
@@ -523,6 +608,8 @@ def pending_k():
     for r in ks:
         x = q.get(r['code'])
         if x: out.append(dict(code=r['code'], name=r['name'], limit=r['limit'], low=x['low'], price=x['price'], hit=x['low'] <= r['limit']))
+        if x and x['low'] <= r['limit']:
+            push(f"挂单可能已成交：{r['name']}", f"{r['name']}（{r['code']}）最低 {x['low']:.2f} ≤ 挂单价 {r['limit']:.2f}，去券商软件确认成交后，在开单工具点「已成交」", key='k_' + r['code'])
     return out
 
 
@@ -539,6 +626,7 @@ def scheduler():
                     S['_ord_next'] = time.time() + 20
                     if hm >= '0930' and now.second >= 30:
                         log(f'自动生成开单单失败：{e}（已重试到 9:30，请在页面手动填写红盘率后生成）'); S['orders_date'] = today + '_fail'
+                        push('开单单没生成，请手动处理', f'{e}\n请打开开单工具，在「9:25 开单」里手动填红盘率后点「生成开单单」', key='orders_fail')
                     else: log(f'自动生成开单单这次没成功：{e}；20 秒后自动重试')
             if wk and '1455' <= hm < '1500' and S.get('sells_date') != today:
                 try: build_sells()
@@ -563,7 +651,7 @@ def api_state():
         return dict(core=CORE_VERSION, now=f'{bj_now():%Y-%m-%d %H:%M:%S}', rules_version=R.get('version'), plan=S.get('latest'), plan_status=plan_status(),
                     plan_err=S.get('plan_err'), plan_loaded=S.get('plan_loaded'), cand=S.get('cand') or [], names=R.get('names', {}), size=R.get('size', {}),
                     notes=R.get('notes', []), equity=S.get('equity'), holdings=S['holdings'], orders=o if o.get('date') == today else None, sells=x if x.get('date') == today else None,
-                    k_watch=S.get('k_watch'), breaks=[a for a in S.get('breaks', []) if a['date'] == today], md=S.get('md', ''), log=S.get('log', [])[-30:], mirror=S.get('mirror', ''), home=HOME)
+                    k_watch=S.get('k_watch'), breaks=[a for a in S.get('breaks', []) if a['date'] == today], md=S.get('md', ''), log=S.get('log', [])[-30:], mirror=S.get('mirror', ''), push=S.get('push', ''), push_ch=_push_channel(S.get('push')), home=HOME)
 
 
 def api_post(path, body):
@@ -571,6 +659,14 @@ def api_post(path, body):
     if path == '/api/equity': S['equity'] = float(body['equity'])
     elif path == '/api/mirror': S['mirror'] = body.get('mirror', '').strip(); refresh_plan()
     elif path == '/api/refresh': refresh_plan()
+    elif path == '/api/push':
+        d = body.get('push', '').strip()
+        if d and not _push_channel(d): raise RuntimeError('看不出这是哪种推送：请填 PushPlus token、Server酱 SendKey（SCT 开头）、Bark 地址，或企业微信 / 钉钉 / 飞书群机器人地址')
+        S['push'] = d
+    elif path == '/api/push_test':
+        ok, msg = push_send('测试消息', f'开单工具 v{CORE_VERSION} 手机推送设置成功：9:25 开单单、炸板提醒、14:55 卖出检查会发到这里')
+        log(f'测试推送{"成功" if ok else "失败"}：{msg}')
+        if not ok: raise RuntimeError(f'测试推送失败：{msg}')
     elif path == '/api/orders': build_orders(float(body['red']) / 100 if body.get('red') not in (None, '') else None)
     elif path == '/api/sells': build_sells()
     elif path == '/api/bought':   # 已成交 → 记入持仓
@@ -646,6 +742,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="row" style="margin-top:8px"><span id="hmode">手动添加：</span>代码<input id="hc" size="7">名称<input id="hn" size="7">路线<select id="hs"></select>买入价<input id="hp" size="7">股数<input id="hq" size="6">买入日<input id="he" size="11" placeholder="如 20261110 或 11-10"><span id="hx" style="display:none">多拿天数<input id="hxe" size="2">已推迟<select id="hxd"><option value="0">否</option><option value="1">是</option></select></span><button id="hb" onclick="addh()">添加</button><button id="hcan" class="ghost" style="display:none" onclick="endedit()">取消修改</button></div></div>
 <div class="card"><h2>今日计划候选</h2><div id="cand"></div></div>
 <div class="card"><h2>计划全文</h2><pre id="md"></pre></div>
+<div class="card"><h2>手机推送（9:25 开单单、炸板提醒、14:55 卖出检查、挂单可能成交）</h2><div class="row">PushPlus token / Server酱 SendKey / Bark 地址 / 企业微信·钉钉·飞书群机器人地址<input id="push" size="50"><button onclick="post('/api/push',{push:val('push')})">保存</button><button onclick="post('/api/push_test',{})">发送测试</button><span id="pushch" class="mute"></span></div><div class="mute">只存在本机。钉钉机器人的安全设置请选「自定义关键词」并填 A股。推送内容会经过对应推送服务的服务器。</div></div>
 <div class="card"><h2>设置与日志</h2><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
 <p class="mute">仅供参考，不构成投资建议；规则来自历史回测，下单以券商软件为准。数据：东方财富、腾讯行情；计划与规则来自 GitHub 仓库，每次启动自动同步。</p></div>
 </main><script>
@@ -665,7 +762,7 @@ function endedit(){editing=null;['hc','hn','hp','hq','he'].forEach(i=>$(i).value
 function tbl(h,rows){return '<table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+rows.join('')+'</table>'}
 async function load(){st=await (await fetch('/api/state')).json();
 $('hd').textContent=`北京时间 ${st.now} ｜ 规则 ${st.rules_version||'?'} ｜ ${st.plan_status}${st.plan_err?' ｜ ⚠ '+st.plan_err:''}`;
-if(document.activeElement!==$('eq'))$('eq').value=st.equity||'';if(document.activeElement!==$('mir'))$('mir').value=st.mirror||'';
+if(document.activeElement!==$('eq'))$('eq').value=st.equity||'';if(document.activeElement!==$('mir'))$('mir').value=st.mirror||'';if(document.activeElement!==$('push'))$('push').value=st.push||'';$('pushch').textContent=st.push_ch?('已设置：'+({pushplus:'PushPlus（微信）',serverchan:'Server酱（微信）',bark:'Bark（iPhone）',wecom:'企业微信机器人',dingtalk:'钉钉机器人',feishu:'飞书机器人',webhook:'自定义地址'}[st.push_ch]||st.push_ch)):'未设置';
 $('acct').textContent=`持仓 ${st.holdings.length} / 5 只；数据目录 ${st.home}`;
 if(!$('hs').options.length)for(const k in st.names){const o=document.createElement('option');o.value=k;o.textContent=st.names[k];$('hs').appendChild(o)}
 const O=st.orders;if(O){$('gate').innerHTML=` <span class="big">${(O.red*100).toFixed(1)}%</span>（${O.red_src}，${esc(O.time)}）→ 竞价 ${O.gate}，可做：${O.allowed.join('、')}`;
