@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       selftest:
-        description: '1 = 自检（检查行情、计划、推送，马上结束）'
+        description: '1 = 自检（检查行情、计划、推送，马上结束）；2 = 用最近交易日行情测试开单单和卖出推送'
         default: '0'
   schedule:
     - cron: '12 1 * * 1-5'   # 北京时间 9:12（兜底）
@@ -32,4 +32,8 @@ jobs:
           CLOUD_ALERT: ${{ vars.CLOUD_ALERT }}
           ASH_QUOTE_SRC: qq
         run: |
-          if [ "${{ github.event.inputs.selftest }}" = "1" ]; then python3 helper/cloud_alert.py --selftest; else python3 helper/cloud_alert.py; fi
+          case "${{ github.event.inputs.selftest }}" in
+            1) python3 helper/cloud_alert.py --selftest ;;
+            2) python3 helper/cloud_alert.py --testpush ;;
+            *) python3 helper/cloud_alert.py ;;
+          esac

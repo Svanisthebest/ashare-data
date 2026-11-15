@@ -98,7 +98,23 @@ def run():
     print('今天的云端提醒结束')
 
 
+def testpush():
+    """用最近一个交易日的行情，把 9:25 开单单和 14:55 卖出检查各走一遍并真的推送（标题注明测试）。"""
+    setup()
+    days = core.trade_days() or []
+    last = max(d for d in days if d <= core.bj_now().strftime('%Y%m%d')) if days else core.bj_now().strftime('%Y%m%d')
+    os.environ['ASH_PUSH_PREFIX'] = f'云端备份·测试（{last[4:6]}-{last[6:]} 数据）·'
+    os.environ['ASH_NOW'] = f'{last} 09:26'
+    S['pushed'] = {}; S['orders_date'] = None
+    core.build_orders()
+    os.environ['ASH_NOW'] = f'{last} 14:55'
+    S['sells_date'] = None
+    core.build_sells()
+    time.sleep(8)
+    print('测试推送完成')
+
+
 if __name__ == '__main__':
     if os.environ.get('CLOUD_ALERT', '').lower() == 'off':
         print('CLOUD_ALERT=off，不运行'); sys.exit(0)
-    (selftest if '--selftest' in sys.argv else run)()
+    (selftest if '--selftest' in sys.argv else testpush if '--testpush' in sys.argv else run)()
