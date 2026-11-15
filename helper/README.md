@@ -75,5 +75,5 @@
 
 - 它不知道你的真实持仓，按**模拟盘的持仓**推送，股数按 `CLOUD_EQUITY`（默认 100 万）估算。
 - 需要在 GitHub 仓库的 Settings → Secrets and variables → Actions 里加一个 Secret：名称 `PUSH_DEST`，值填推送 token 或地址（和开单工具里填的一样）。
-- 可选的 Variables：`CLOUD_EQUITY` 填你的账户金额；`CLOUD_ALERT` 填 `off` 可以关掉云端提醒。
+- 可选：再加一个 Secret，名称 `CLOUD_EQUITY`，值填账户金额（如 190000），推送里的股数按它估算；在 Variables 里加 `CLOUD_ALERT` = `off` 可以关掉云端提醒。
 - 自检：在 GitHub 的 Actions → cloud_alert → Run workflow，selftest 填 1。手机收到「云端提醒自检」就说明推送通了。

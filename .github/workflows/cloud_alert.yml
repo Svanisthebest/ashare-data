@@ -32,7 +32,7 @@ jobs:
       - name: 云端提醒
         env:
           PUSH_DEST: ${{ secrets.PUSH_DEST }}
-          CLOUD_EQUITY: ${{ vars.CLOUD_EQUITY }}
+          CLOUD_EQUITY: ${{ secrets.CLOUD_EQUITY || vars.CLOUD_EQUITY }}
           CLOUD_ALERT: ${{ vars.CLOUD_ALERT }}
           ASH_QUOTE_SRC: qq
         run: |
