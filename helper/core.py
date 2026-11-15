@@ -288,6 +288,11 @@ def quotes_all():
     v18：先东方财富（大页 → 翻页，限时）；不足 4000 只就改用腾讯行情（按全 A 代码表多线程取）。"""
     if MOCK: QSRC['src'] = '模拟'; return _mock_rows()
     t0 = time.time(); err = []
+    if os.environ.get('ASH_QUOTE_SRC') == 'qq':     # GitHub 云端：东方财富会被拦，直接用腾讯
+        try:
+            q = _qq_all(); QSRC['src'] = f'腾讯 {len(q)} 只，{time.time() - t0:.0f} 秒'
+            if len(q) >= 4000: return q
+        except Exception as e: err.append(f'腾讯：{str(e)[:60]}')
     try: rows = _em_all()
     except Exception as e: rows = {}; err.append(f'东方财富：{str(e)[:60]}')
     if len(rows) >= 4000:
