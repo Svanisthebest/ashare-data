@@ -106,6 +106,14 @@ def testpush():
     os.environ['ASH_PUSH_PREFIX'] = f'云端备份·测试（{last[4:6]}-{last[6:]} 数据）·'
     os.environ['ASH_NOW'] = f'{last} 09:26'
     S['pushed'] = {}; S['orders_date'] = None
+    # 用测试那天真正在用的计划：前一个交易日收盘后生成的那份（不是最新的）
+    import csv as _csv, io as _io
+    prev = core.prev_trade_day(last)
+    if prev and (S.get('latest') or {}).get('plan_date') != prev:
+        txt = core.repo_get(f'data/plan/{prev}.csv') if os.path.exists(os.path.join(ROOT, 'data', 'plan', f'{prev}.csv')) else 'src,代码\n'
+        S['cand'] = [r for r in _csv.DictReader(_io.StringIO(txt.lstrip('\ufeff')))]
+        S['latest'] = dict(S['latest'], plan_date=prev, csv=f'data/plan/{prev}.csv', md=f'data/plan/{prev}.md')
+        core.log(f'测试改用 {prev} 的计划（{last} 开盘时实际用的那份），候选 {len(S["cand"])} 只')
     core.build_orders()
     os.environ['ASH_NOW'] = f'{last} 14:55'
     S['sells_date'] = None
