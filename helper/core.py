@@ -16,7 +16,7 @@ import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 20
+CORE_VERSION = 21
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -202,12 +202,22 @@ def push(title, body, key=None):
 
 def push_orders(o):
     buys = [r for r in o['rows'] if r['action'] != '不买']
-    lines = [f"红盘率 {o['red']:.1%}（{o['gate']}），{o.get('red_src', '')}"]
+    eq = o.get('equity') or S.get('equity') or 0
+    size = (S.get('rules') or {}).get('size', {})
+    lines = [f"红盘率 {o['red']:.1%}（{o['gate']}），{o.get('red_src', '')}", f"账户 {eq:,.0f} 元"]
     for r in buys:
-        if r['action'] == '挂单': lines.append(f"挂单 {r['route']} {r['name']} {r['code']}：挂 {r.get('limit')} 买 {r.get('shares')} 股，收盘前没成交撤单")
-        else: lines.append(f"买 {r['route']} {r['name']} {r['code']}：挂 {r.get('limit')} 买 {r.get('shares')} 股（约 {r.get('amount')} 元）")
+        pc = r.get('pct', size.get(r.get('src'), 20)); amt = r.get('amount') or 0
+        real = f"，实际约 {amt / eq:.0%}" if eq and amt else ''
+        pos = f"建议仓位 {pc}%（约 {pc / 100 * eq:,.0f} 元{real}）" if eq else f"建议仓位 {pc}%"
+        if r['action'] == '挂单':
+            lines.append(f"挂单 {r['route']} {r['name']} {r['code']}：{pos}；挂 {r.get('limit')} 买 {r.get('shares')} 股，收盘前没成交撤单")
+        else:
+            lines.append(f"买 {r['route']} {r['name']} {r['code']}：{pos}；挂 {r.get('limit')} 买 {r.get('shares')} 股（{amt:,.0f} 元）")
+        if '资金不足' in (r.get('why') or ''): lines[-1] += '（可用资金不足，没买满）'
     if not buys: lines.append('今天没有符合条件的买入')
-    lines.append(f"开单后剩余可用约 {o.get('cash_left')} 元；9:30 没成交最多改到 +1%，再高就放弃")
+    tot = sum(r.get('amount') or 0 for r in buys)
+    if buys and eq: lines.append(f"合计买入约 {tot:,.0f} 元，占账户 {tot / eq:.0%}")
+    lines.append(f"开单后剩余可用约 {o.get('cash_left'):,.0f} 元；9:30 没成交最多改到 +1%，再高就放弃")
     push(f"9:25 开单单：买 {len(buys)} 只", '\n'.join(lines), key='orders')
 
 

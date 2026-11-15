@@ -7,6 +7,9 @@ on:
       selftest:
         description: '1 = 自检（检查行情、计划、推送，马上结束）；2 = 用最近交易日行情测试开单单和卖出推送'
         default: '0'
+      day:
+        description: '测试推送用哪天的日线回放（如 20261110，留空 = 最近交易日的实时行情）'
+        default: ''
   schedule:
     - cron: '12 1 * * 1-5'   # 北京时间 9:12（兜底）
 concurrency:
@@ -24,6 +27,7 @@ jobs:
             data/helper
             data/sim/book.json
             data/plan
+            data/daily/202611*
           sparse-checkout-cone-mode: false
       - name: 云端提醒
         env:
@@ -34,6 +38,6 @@ jobs:
         run: |
           case "${{ github.event.inputs.selftest }}" in
             1) python3 helper/cloud_alert.py --selftest ;;
-            2) python3 helper/cloud_alert.py --testpush ;;
+            2) python3 helper/cloud_alert.py --testpush ${{ github.event.inputs.day }} ;;
             *) python3 helper/cloud_alert.py ;;
           esac

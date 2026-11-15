@@ -98,11 +98,14 @@ def run():
     print('今天的云端提醒结束')
 
 
-def testpush():
-    """用最近一个交易日的行情，把 9:25 开单单和 14:55 卖出检查各走一遍并真的推送（标题注明测试）。"""
+def testpush(day=None):
+    """用最近一个交易日（或指定日期 day，用仓库里那天的日线回放）的行情，把 9:25 开单单和 14:55 卖出检查各走一遍并真的推送（标题注明测试）。"""
+    if day:
+        core.MOCK = f'{ROOT};{day}'; os.environ['ASH_PUSH_TEST'] = '1'
     setup()
+    if day: S['holdings'] = []   # 回放过去的日子：现在的模拟盘持仓那天还不存在，只测开单单
     days = core.trade_days() or []
-    last = max(d for d in days if d <= core.bj_now().strftime('%Y%m%d')) if days else core.bj_now().strftime('%Y%m%d')
+    last = day or (max(d for d in days if d <= core.bj_now().strftime('%Y%m%d')) if days else core.bj_now().strftime('%Y%m%d'))
     os.environ['ASH_PUSH_PREFIX'] = f'云端备份·测试（{last[4:6]}-{last[6:]} 数据）·'
     os.environ['ASH_NOW'] = f'{last} 09:26'
     S['pushed'] = {}; S['orders_date'] = None
@@ -125,4 +128,6 @@ def testpush():
 if __name__ == '__main__':
     if os.environ.get('CLOUD_ALERT', '').lower() == 'off':
         print('CLOUD_ALERT=off，不运行'); sys.exit(0)
-    (selftest if '--selftest' in sys.argv else testpush if '--testpush' in sys.argv else run)()
+    if '--testpush' in sys.argv:
+        i = sys.argv.index('--testpush'); testpush(sys.argv[i + 1] if len(sys.argv) > i + 1 and sys.argv[i + 1].isdigit() else None)
+    else: (selftest if '--selftest' in sys.argv else run)()
