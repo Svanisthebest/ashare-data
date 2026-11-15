@@ -1,0 +1,34 @@
+name: cloud_alert
+# GitHub 云端提醒（备份）：交易日按模拟盘持仓推送开单单、炸板、卖出提醒到手机。
+# 主触发：每天 8:53 的「竞价采集保障」定时任务在 9:10 左右手动启动；下面的定时只是兜底（GitHub 定时经常迟到）。
+on:
+  workflow_dispatch:
+    inputs:
+      selftest:
+        description: '1 = 自检（检查行情、计划、推送，马上结束）'
+        default: '0'
+  schedule:
+    - cron: '12 1 * * 1-5'   # 北京时间 9:12（兜底）
+concurrency:
+  group: cloud_alert
+  cancel-in-progress: false
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            helper
+            data/helper
+            data/sim/book.json
+            data/plan
+          sparse-checkout-cone-mode: false
+      - name: 云端提醒
+        env:
+          PUSH_DEST: ${{ secrets.PUSH_DEST }}
+          CLOUD_EQUITY: ${{ vars.CLOUD_EQUITY }}
+          CLOUD_ALERT: ${{ vars.CLOUD_ALERT }}
+        run: |
+          if [ "${{ github.event.inputs.selftest }}" = "1" ]; then python3 helper/cloud_alert.py --selftest; else python3 helper/cloud_alert.py; fi

@@ -39,10 +39,14 @@ if __name__ == '__main__':
     local = os.environ.get('ASH_CORE')            # 开发测试：直接用本地 core.py
     code = open(local, encoding='utf-8').read() if local else fetch()
     if not code:
-        print('第一次运行需要联网下载核心程序，请检查网络后重试。'); input('按回车退出'); sys.exit(1)
+        print('第一次运行需要联网下载核心程序，请检查网络后重试。')
+        if not os.environ.get('ASH_SERVER'): input('按回车退出')
+        sys.exit(1)
     g = {'__name__': '__main__', '__file__': CACHE}
     try:
         exec(compile(code, CACHE, 'exec'), g)
     except SystemExit: pass
     except Exception:
-        traceback.print_exc(); input('出错了，按回车退出（把上面的信息发给 Claude）')
+        traceback.print_exc()
+        if os.environ.get('ASH_SERVER'): sys.exit(1)           # 云服务器：退出后由系统服务自动重启
+        input('出错了，按回车退出（把上面的信息发给 Claude）')

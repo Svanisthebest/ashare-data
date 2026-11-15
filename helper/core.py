@@ -10,13 +10,13 @@ A股短线开单助手（核心程序）。由 launcher.py 启动时从仓库下
   - 本地记录持仓（买入价、股数、多拿 / 推迟状态），数据只存在本机
 只用 Python 标准库。仅供参考，不构成投资建议；下单以券商软件为准。
 """
-import csv, io, json, math, os, sys, threading, time, traceback, webbrowser
+import base64, csv, hmac, io, json, math, os, sys, threading, time, traceback, webbrowser
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CORE_VERSION = 19
+CORE_VERSION = 20
 REPO = 'Svanisthebest/ashare-data'
 MIRRORS = ['https://raw.githubusercontent.com/{repo}/main/{path}',
            'https://ghfast.top/https://raw.githubusercontent.com/{repo}/main/{path}',
@@ -108,6 +108,7 @@ def http_get(url, params=None, timeout=10, enc=None, tries=3):
 
 def repo_get(path):
     if MOCK: return open(os.path.join(MOCK.split(';')[0], path), encoding='utf-8-sig').read()
+    if os.environ.get('ASH_LOCAL_REPO'): return open(os.path.join(os.environ['ASH_LOCAL_REPO'], path), encoding='utf-8-sig').read()
     urls = ([S['mirror'].rstrip('/') + '/' + path] if S.get('mirror') else []) + [m.format(repo=REPO, path=path) for m in MIRRORS]
     err = []
     for u in urls:
@@ -161,7 +162,7 @@ def push_send(title, body, dest=None):
     """发一条推送到手机，返回 (成功, 说明)。不在后台线程里调用时会阻塞几秒。"""
     dest = (dest if dest is not None else S.get('push') or '').strip(); ch = _push_channel(dest)
     if not ch: return False, '没有设置推送'
-    title = '【A股】' + title; text = title + '\n' + body
+    title = '【A股】' + os.environ.get('ASH_PUSH_PREFIX', '') + title; text = title + '\n' + body
     try:
         if ch == 'pushplus': r = _http_post('https://www.pushplus.plus/send', dict(token=dest, title=title, content=body, template='txt'))
         elif ch == 'serverchan': r = _http_post(f'https://sctapi.ftqq.com/{dest}.send', dict(title=title, desp=body.replace('\n', '\n\n')), form=True)
@@ -659,6 +660,13 @@ def api_post(path, body):
     if path == '/api/equity': S['equity'] = float(body['equity'])
     elif path == '/api/mirror': S['mirror'] = body.get('mirror', '').strip(); refresh_plan()
     elif path == '/api/refresh': refresh_plan()
+    elif path == '/api/import':
+        try: d = json.loads(body.get('data') or '{}')
+        except Exception: d = None
+        if not isinstance(d, dict) or not any(k in d for k in ('holdings', 'equity', 'history')): raise RuntimeError('导入内容不对：请粘贴从另一台开单工具「导出数据」得到的全部文字')
+        for k in ('equity', 'holdings', 'history', 'push', 'mirror'):
+            if k in d and d[k] not in (None, ''): S[k] = d[k]
+        log(f"已导入数据：持仓 {len(S.get('holdings') or [])} 只，账户 {S.get('equity')} 元")
     elif path == '/api/push':
         d = body.get('push', '').strip()
         if d and not _push_channel(d): raise RuntimeError('看不出这是哪种推送：请填 PushPlus token、Server酱 SendKey（SCT 开头）、Bark 地址，或企业微信 / 钉钉 / 飞书群机器人地址')
@@ -703,10 +711,28 @@ class H(BaseHTTPRequestHandler):
     def _send(self, code, data, ctype='application/json; charset=utf-8'):
         b = data if isinstance(data, bytes) else (json.dumps(data, ensure_ascii=False, default=str) if not isinstance(data, str) else data).encode('utf-8')
         self.send_response(code); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
+    def _auth(self):
+        """v20：设置了访问密码（ASH_PASSWORD）时，本机以外的访问要输密码（浏览器弹框，用户名随便填）。"""
+        pw = os.environ.get('ASH_PASSWORD', '')
+        if not pw or self.client_address[0] in ('127.0.0.1', '::1'): return True
+        a = self.headers.get('Authorization') or ''
+        try: ok = a.startswith('Basic ') and hmac.compare_digest(base64.b64decode(a[6:]).decode('utf-8').split(':', 1)[1], pw)
+        except Exception: ok = False
+        if ok: return True
+        time.sleep(1)
+        self.send_response(401); self.send_header('WWW-Authenticate', 'Basic realm="A-share helper", charset="UTF-8"'); self.send_header('Content-Length', '0'); self.end_headers()
+        return False
     def do_GET(self):
-        if self.path.startswith('/api/state'): return self._send(200, api_state())
+        if not self._auth(): return
+        if self.path.startswith('/api/state'):
+            try: return self._send(200, api_state())
+            except Exception as e: return self._send(200, {'ok': False, 'err': f'读取状态出错：{e}'})
+        if self.path.startswith('/api/export'):
+            with LOCK: d = {k: S.get(k) for k in ('equity', 'holdings', 'history', 'push', 'mirror')}
+            return self._send(200, d)
         return self._send(200, PAGE, 'text/html; charset=utf-8')
     def do_POST(self):
+        if not self._auth(): return
         try:
             n = int(self.headers.get('Content-Length') or 0); body = json.loads(self.rfile.read(n) or b'{}')
             self._send(200, api_post(self.path, body))
@@ -743,7 +769,7 @@ pre{white-space:pre-wrap;font-size:12px;max-height:340px;overflow:auto;margin:0}
 <div class="card"><h2>今日计划候选</h2><div id="cand"></div></div>
 <div class="card"><h2>计划全文</h2><pre id="md"></pre></div>
 <div class="card"><h2>手机推送（9:25 开单单、炸板提醒、14:55 卖出检查、挂单可能成交）</h2><div class="row">PushPlus token / Server酱 SendKey / Bark 地址 / 企业微信·钉钉·飞书群机器人地址<input id="push" size="50"><button onclick="post('/api/push',{push:val('push')})">保存</button><button onclick="post('/api/push_test',{})">发送测试</button><span id="pushch" class="mute"></span></div><div class="mute">只存在本机。钉钉机器人的安全设置请选「自定义关键词」并填 A股。推送内容会经过对应推送服务的服务器。</div></div>
-<div class="card"><h2>设置与日志</h2><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
+<div class="card"><h2>设置与日志</h2><div class="row">数据搬家（换电脑 / 搬到云服务器）：<a href="/api/export" target="_blank">导出数据</a>（打开后全选复制）　粘贴到这里导入：<input id="imp" size="30"><button onclick="if(confirm('导入会覆盖这里的持仓和账户资金，确定？'))post('/api/import',{data:val('imp')})">导入</button></div><div class="row">仓库镜像（读不到 GitHub 时填，例如 https://ghfast.top/https://raw.githubusercontent.com/Svanisthebest/ashare-data/main）<input id="mir" size="60"><button onclick="post('/api/mirror',{mirror:val('mir')})">保存</button></div><pre id="log" class="mute"></pre>
 <p class="mute">仅供参考，不构成投资建议；规则来自历史回测，下单以券商软件为准。数据：东方财富、腾讯行情；计划与规则来自 GitHub 仓库，每次启动自动同步。</p></div>
 </main><script>
 let st={},seenO='',seenS='',seenB=-1;const $=id=>document.getElementById(id),val=id=>$(id).value;
@@ -787,10 +813,15 @@ def main():
     log(f'助手核心 v{CORE_VERSION} 启动，数据目录 {HOME}')
     if load_cache(): log(f"先显示本机上次保存的计划 {S['latest'].get('plan_date')}，正在读取最新计划…")
     threading.Thread(target=scheduler, daemon=True).start()
-    for port in range(8765, 8775):
-        try: srv = ThreadingHTTPServer(('127.0.0.1', port), H); break
+    host = os.environ.get('ASH_HOST', '127.0.0.1'); p0 = int(os.environ.get('ASH_PORT', '8765'))
+    if host not in ('127.0.0.1', 'localhost') and len(os.environ.get('ASH_PASSWORD', '')) < 6:
+        log('⚠ 要开启远程访问必须设置至少 6 位的访问密码（ASH_PASSWORD），这次只允许本机访问'); host = '127.0.0.1'
+    for port in range(p0, p0 + 10):
+        try: srv = ThreadingHTTPServer((host, port), H); break
         except OSError: continue
-    url = f'http://127.0.0.1:{port}/'; log(f'页面：{url}（关掉这个窗口助手就停止）')
+    url = f'http://127.0.0.1:{port}/'
+    if host == '127.0.0.1': log(f'页面：{url}（关掉这个窗口助手就停止）')
+    else: log(f'远程访问已开启：手机或其他电脑用浏览器打开 http://<服务器公网IP>:{port}/ ，输入访问密码（用户名随便填）')
     if not os.environ.get('ASH_NOBROWSER'): webbrowser.open(url)
     srv.serve_forever()
 
