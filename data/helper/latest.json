@@ -1,11 +1,11 @@
 {
- "plan_date": "20261113",
- "csv": "data/plan/20261113.csv",
- "md": "data/plan/20261113.md",
+ "plan_date": "20261116",
+ "csv": "data/plan/20261116.csv",
+ "md": "data/plan/20261116.md",
  "rules": "data/helper/rules.json",
  "version": "v1.5.3",
- "csv_sha256": "fab0899365fc3e72",
+ "csv_sha256": "7915f150039c5818",
  "rules_sha256": "ef02263f4ab8306f",
- "generated": "2026-11-13 14:58 UTC",
- "universe": "data/helper/universe.txt"
+ "universe": "data/helper/universe.txt",
+ "generated": "2026-11-16 11:55 UTC"
 }
