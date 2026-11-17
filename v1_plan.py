@@ -249,13 +249,18 @@ def main():
             if r['代码'] in td.index and sm.loc[r['组'], '规模'] >= 3: add('L', r['代码'], f"组{r['组']}（{int(sm.loc[r['组'],'规模'])}只）开盘<+2%才买，即 < {td.loc[r['代码'],'close']*1.02:.2f}", -sm.loc[r['组'], '规模'])
     # 总龙头强势首阴：前一天全市场最高板（v1.1：≥4板），今天没涨停但收涨 > 3%
     pmax = pv.lb[pv.zt].max() if pv.zt.any() else 0
+    # 第二十七轮：情绪顶峰标注（观察项，不影响买入）——连板家数（非 ST、≥2 板涨停）/ 近 10 个交易日最高（含今天），≥ 70% 视为顶峰
+    _lb2 = df[df.zt & ~df.st & (df.lb >= 2)].groupby('date').size().reindex(days, fill_value=0)
+    lb2_now = int(_lb2.iloc[-1]); lb2_max = int(_lb2.iloc[-10:].max()); lb2r = lb2_now / lb2_max if lb2_max else 0.0
+    peak_ = lb2r >= 0.70
+    peak_txt = f'连板 {lb2_now} 家 / 近10日最高 {lb2_max} 家 = {lb2r:.0%}，{"情绪顶峰" if peak_ else "非顶峰"}'
     if pmax >= 4:
         for code in pv[(pv.zt) & (pv.lb == pmax)].index:
             if code in td.index and not td.loc[code, 'zt'] and td.loc[code, 'ret'] > 0.03:
                 # 第二十四/二十五轮：只标注信号日走法（不改买法），用实盘积累「先涨停后炸板」样本
                 r_ = td.loc[code]; tch = r_.high >= r_.up - 0.005; und = r_.low < r_.prev_close - 0.001
                 pat = '地天（冲过板又到过水下）' if tch and und else '先涨停后炸板' if tch else '先水下再拉起' if und else '水上未冲板'
-                add('LD', code, f'昨日 {int(pmax)} 板，今日断板收涨；走法：{pat}（观察项，不影响买入）', 0)
+                add('LD', code, f'昨日 {int(pmax)} 板，今日断板收涨；走法：{pat}；{"情绪顶峰" if peak_ else "非顶峰"}（{lb2r:.0%}）（观察项，不影响买入）', 0)
     # 高标被砸：近 15 日最高 ≥ 4 板，昨天涨停，今天跌停（非天地板）或跌 ≥ 7%。v1.3：今天涨停 ≥ 60 家不做；
     # 次日竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间，开盘后挂「开盘价 × 0.97」买单，收盘前没成交就撤单
     kk = td[td.index.isin(pv[pv.zt & (pv.mlb15 >= 4)].index) & ((td['dt'] & (td.high < td.up - 0.001)) | ((td.ret <= -0.07) & ~td['dt']))]
@@ -318,7 +323,7 @@ def main():
          f'- 当天：红盘率 {red:.0%}，涨停 {nzt}，跌停 {ndt}，最高 {maxlb} 板；中证1000 {zr:+.2%}，距 20 日高点 {fh:+.1%}，{"在" if above5 else "不在"} 5 日线上。',
          f'- 量能：{vol_txt}。大票缩量上涨一般走不远，明显放量的上涨才有延续性（仅供参考）。',
          '- 板块量能：候选表里的「所属板块（量比）」是该股当天最强板块的成交额 ÷ 前 5 日均额。量比 ≥1.8，或板块 20 日已涨 >15% 且量比 ≥1.5，会标 ⚠：板块爆量多是情绪高潮，次日容易分歧，可少买或不买（提示，不是规则）。',
-         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板）；{y_note}；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
+         f'- 特殊状态：恐慌低吸{"已触发" if ndt >= 200 else "未触发"}（跌停 ≥ 200）；昨日涨停溢价 {prem:+.2%}；总龙头首阴{"有资格" if pmax >= 4 else "不做（昨日最高板 < 4）"}（昨日最高 {int(pmax)} 板；{peak_txt}，顶峰时总龙头首阴为观察项）；{y_note}；高标被砸{"可做" if nzt < 60 else "不做（今天涨停 ≥ 60 家）"}；{("今天是周五，下一交易日适用周一放宽" if above5 else "今天是周五，但中证1000 在 5 日线下，周一放宽不做") if monday else ""}', '',
          '## 9:25 竞价决定动作', '',
          '| 全A竞价红盘率 | 可做的路线 |', '|---|---|',
          '| > 55% | 总龙头首阴、2板龙头、缩量断板低开、恐慌低吸、低位启动、2板断板强收、炸板弱转强（高标被砸、周一放宽、首板强势未封低开不做） |',
