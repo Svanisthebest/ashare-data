@@ -251,7 +251,11 @@ def main():
     pmax = pv.lb[pv.zt].max() if pv.zt.any() else 0
     if pmax >= 4:
         for code in pv[(pv.zt) & (pv.lb == pmax)].index:
-            if code in td.index and not td.loc[code, 'zt'] and td.loc[code, 'ret'] > 0.03: add('LD', code, f'昨日 {int(pmax)} 板，今日断板收涨', 0)
+            if code in td.index and not td.loc[code, 'zt'] and td.loc[code, 'ret'] > 0.03:
+                # 第二十四/二十五轮：只标注信号日走法（不改买法），用实盘积累「先涨停后炸板」样本
+                r_ = td.loc[code]; tch = r_.high >= r_.up - 0.005; und = r_.low < r_.prev_close - 0.001
+                pat = '地天（冲过板又到过水下）' if tch and und else '先涨停后炸板' if tch else '先水下再拉起' if und else '水上未冲板'
+                add('LD', code, f'昨日 {int(pmax)} 板，今日断板收涨；走法：{pat}（观察项，不影响买入）', 0)
     # 高标被砸：近 15 日最高 ≥ 4 板，昨天涨停，今天跌停（非天地板）或跌 ≥ 7%。v1.3：今天涨停 ≥ 60 家不做；
     # 次日竞价红盘 < 55% 且开盘在昨收 −3% 到 0 之间，开盘后挂「开盘价 × 0.97」买单，收盘前没成交就撤单
     kk = td[td.index.isin(pv[pv.zt & (pv.mlb15 >= 4)].index) & ((td['dt'] & (td.high < td.up - 0.001)) | ((td.ret <= -0.07) & ~td['dt']))]
