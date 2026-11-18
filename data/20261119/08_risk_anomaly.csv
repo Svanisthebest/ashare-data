@@ -1,0 +1,3 @@
+﻿code,name,market,change_pct,deviation,days,board,rule_code,rule,is_today
+300949,奥雅股份,SZ,16.1,161.47,22,4,6,连续三十个交易日内日收盘价涨跌幅偏离值累计达到+200%,False
+688613,奥精医疗,SH,-2.86,-71.55,13,5,7,连续三十个交易日内日收盘价涨跌幅偏离值累计达到-70%,True
