@@ -1,0 +1,45 @@
+name: 候选股买入日 5 分钟线（研究用）
+
+on:
+  workflow_dispatch:
+    inputs:
+      nshards:
+        description: "分片数"
+        default: "20"
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.m.outputs.shards }}
+    steps:
+      - id: m
+        run: echo "shards=$(python3 -c "import json;print(json.dumps(list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view min5buy -R ${{ github.repository }} || gh release create min5buy -R ${{ github.repository }} -t "候选股买入日5分钟线" -n "min5_buydays.py 生成，研究用（第三十六轮：买入当天入场时点研究）"
+  pull:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            min5_buydays.py
+            min5_buydays.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas baostock
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: python min5_buydays.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }}
