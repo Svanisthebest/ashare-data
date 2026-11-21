@@ -6,6 +6,9 @@ on:
       nshards:
         description: "分片数"
         default: "12"
+      test:
+        description: "测试模式（只拉每年前 3 天）"
+        default: ""
 
 permissions:
   contents: write
@@ -41,4 +44,5 @@ jobs:
       - run: pip install pandas akshare
       - env:
           GH_TOKEN: ${{ github.token }}
+          TEST: ${{ github.event.inputs.test }}
         run: python notice_pull.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }}

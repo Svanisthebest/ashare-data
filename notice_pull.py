@@ -19,11 +19,13 @@ years = list(range(2015, 2027)); ys = years[a.shard::a.nshards]
 pat = "异常波动|风险提示|停牌核查|严重异常|偏离"
 for y in ys:
     days = pd.bdate_range(f"{y}-01-01", f"{y}-12-31"); parts = []; f = f"out/notice_{y}.csv.gz"
+    if os.environ.get("TEST"): days = days[:3]
     for i, d in enumerate(days):
         ds = d.strftime("%Y%m%d")
         for k in range(3):
             try:
-                x = call("stock_notice_report", symbol="全部", date=ds)
+                t1 = time.time(); x = call("stock_notice_report", symbol="全部", date=ds)
+                if os.environ.get("TEST"): print("用时", ds, f"{time.time()-t1:.1f}s", None if x is None else x.shape, flush=True)
                 if x is not None and len(x):
                     tcol = [c for c in x.columns if "标题" in c][0]
                     x = x[x[tcol].astype(str).str.contains(pat)]; x["date"] = ds; parts.append(x)
