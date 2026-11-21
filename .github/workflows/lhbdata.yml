@@ -1,0 +1,27 @@
+name: 龙虎榜明细与机构买卖（研究用）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            lhb_pull.py
+            lhb_pull.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas akshare
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view lhbdata -R ${{ github.repository }} || gh release create lhbdata -R ${{ github.repository }} -t "龙虎榜数据" -n "lhb_pull.py 生成，研究用（第四十三轮）"
+          python lhb_pull.py
