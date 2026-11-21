@@ -1,0 +1,27 @@
+name: T+0 品种日线（研究用）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            t0_pull.py
+            t0_pull.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas akshare
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view t0data -R ${{ github.repository }} || gh release create t0data -R ${{ github.repository }} -t "T+0 品种数据" -n "t0_pull.py 生成，研究用（第四十二轮）"
+          python t0_pull.py
