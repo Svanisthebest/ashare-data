@@ -3,15 +3,26 @@
 1) akshare 拉全部可转债清单（含正股代码、上市日期），2) 对候选股出现过的正股，拉转债日线历史；结果上传 Release cbdata。"""
 import os, subprocess, time, traceback
 import pandas as pd
-import akshare as ak
+import akshare as ak, re
+def call(name, **kw):
+    for _ in range(3):
+        try:
+            return getattr(ak, name)(**kw)
+        except AttributeError as e:
+            m = re.search(r"更名为\s*([A-Za-z0-9_]+)", str(e))
+            if not m: raise
+            print("改名", name, "->", m.group(1), flush=True); name = m.group(1)
+    raise RuntimeError("改名次数过多")
+names = [n for n in dir(ak) if ("cov" in n or "bond_cb" in n)]
+print("可用转债函数（部分）:", names[:80], flush=True)
 os.makedirs("out", exist_ok=True)
 repo = os.environ.get("GITHUB_REPOSITORY")
 up = lambda *fs: repo and subprocess.run(["gh", "release", "upload", "cbdata", *fs, "--clobber", "-R", repo], check=False)
 cand = pd.read_csv("cb_cands.csv", dtype=str); stocks = set(cand.code.str.zfill(6))
 lst = None
-for fn in ("bond_zh_cov",):
+for fn in ("bond_cb_list_em", "bond_zh_cov"):
     try:
-        lst = getattr(ak, fn)(); print(fn, lst.shape, list(lst.columns), flush=True); break
+        lst = call(fn); print(fn, lst.shape, list(lst.columns), flush=True); print(lst.head(3).to_string(), flush=True); break
     except Exception:
         traceback.print_exc()
 lst.to_csv("out/cb_list.csv", index=False); up("out/cb_list.csv")
@@ -23,7 +34,8 @@ parts = []; t0 = time.time()
 for i, c in enumerate(sel[ccol]):
     sym = ("sh" if c.startswith("11") else "sz") + c
     try:
-        d = ak.bond_zh_hs_cov_daily(symbol=sym); d["cb"] = c; parts.append(d)
+        d = call("bond_zh_hs_cov_daily", symbol=sym); d["cb"] = c; parts.append(d)
+        if i == 0: print(d.tail(2).to_string(), flush=True)
     except Exception as e:
         print("err", sym, e, flush=True)
     if (i + 1) % 50 == 0:
