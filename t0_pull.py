@@ -13,15 +13,20 @@ def call(name, **kw):
             m = re.search(r"更名为\s*([A-Za-z0-9_]+)", str(e))
             if not m: raise
             print("改名", name, "->", m.group(1), flush=True); name = m.group(1)
-# 1) 股指期货主力连续
+# 1) 股指期货主力连续（已拉过则跳过）
 fut = []
-for s in ("IF0", "IH0", "IC0", "IM0"):
+for s in (() if os.environ.get("SKIP_FUT") else ("IF0", "IH0", "IC0", "IM0")):
     try:
         d = call("futures_main_sina", symbol=s); d["sym"] = s; fut.append(d); print(s, d.shape, list(d.columns)[:8], flush=True)
     except Exception: traceback.print_exc()
 if fut: pd.concat(fut).to_csv("out/fut_daily.csv", index=False); up("out/fut_daily.csv")
 # 2) ETF 清单 → 名称关键词筛 T+0（跨境、黄金、商品、债券）
-lst = call("fund_etf_spot_em"); print("ETF 清单", lst.shape, list(lst.columns)[:10], flush=True)
+SRC = "em"
+try:
+    lst = call("fund_etf_spot_em")
+except Exception as e:
+    print("东方财富清单失败，改用新浪", e, flush=True); lst = call("fund_etf_category_sina", symbol="ETF基金"); SRC = "sina"
+print("ETF 清单", SRC, lst.shape, list(lst.columns)[:10], flush=True)
 lst.to_csv("out/etf_list.csv", index=False); up("out/etf_list.csv")
 kw = "纳指|纳斯达克|标普|道琼斯|日经|东证|恒生|港股|H股|中概|德国|法国|欧洲|亚太|沙特|东南亚|美国|海外|全球|黄金|白银|豆粕|有色|能源化工|原油|债|国债|信用|可转债"
 ncol = [c for c in lst.columns if "名称" in c][0]; ccol = [c for c in lst.columns if "代码" in c][0]
@@ -30,7 +35,12 @@ print("候选 T+0 ETF", len(sel), flush=True)
 parts = []
 for i, (c, n) in enumerate(zip(sel[ccol].astype(str), sel[ncol])):
     try:
-        d = call("fund_etf_hist_em", symbol=c, period="daily", start_date="20150101", end_date="20261231", adjust=""); d["code"] = c; d["name"] = n; parts.append(d)
+        if SRC == "em":
+            d = call("fund_etf_hist_em", symbol=c, period="daily", start_date="20150101", end_date="20261231", adjust="")
+        else:
+            d = call("fund_etf_hist_sina", symbol=c if c[:2] in ("sh", "sz") else (("sh" if c.startswith("5") else "sz") + c))
+        d["code"] = c; d["name"] = n; parts.append(d)
+        if i == 0: print(d.tail(2).to_string(), flush=True)
     except Exception as e: print("err", c, e, flush=True)
     if (i + 1) % 40 == 0:
         pd.concat(parts).to_csv("out/etf_daily.csv.gz", index=False); up("out/etf_daily.csv.gz"); print(i + 1, flush=True)

@@ -24,4 +24,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view t0data -R ${{ github.repository }} || gh release create t0data -R ${{ github.repository }} -t "T+0 品种数据" -n "t0_pull.py 生成，研究用（第四十二轮）"
-          python t0_pull.py
+          SKIP_FUT=1 python t0_pull.py
