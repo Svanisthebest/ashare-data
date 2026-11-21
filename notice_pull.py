@@ -31,6 +31,8 @@ for y in ys:
                     x = x[x[tcol].astype(str).str.contains(pat)]; x["date"] = ds; parts.append(x)
                 if i == 0: print(y, ds, list(x.columns) if x is not None else None, flush=True)
                 break
+            except KeyError:
+                break   # 当天没有公告（返回空表）
             except Exception as e:
                 print("err", ds, k, str(e)[:150], flush=True); time.sleep(3 + 5 * k)
         if (i + 1) % 60 == 0 and parts:
