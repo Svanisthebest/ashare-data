@@ -1,0 +1,27 @@
+name: 可转债清单与日线（研究用）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            cb_pull.py
+            cb_cands.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas akshare
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view cbdata -R ${{ github.repository }} || gh release create cbdata -R ${{ github.repository }} -t "可转债数据" -n "cb_pull.py 生成，研究用（第四十一轮）"
+          python cb_pull.py
