@@ -1,0 +1,49 @@
+name: 风险类公告（按股票，研究用）
+
+on:
+  workflow_dispatch:
+    inputs:
+      nshards:
+        description: "分片数"
+        default: "15"
+      test:
+        description: "测试模式（只拉每年前 3 天）"
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.m.outputs.shards }}
+    steps:
+      - id: m
+        run: echo "shards=$(python3 -c "import json;print(json.dumps(list(range(${{ github.event.inputs.nshards }}))))")" >> "$GITHUB_OUTPUT"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view notices2 -R ${{ github.repository }} || gh release create notices2 -R ${{ github.repository }} -t "风险类公告" -n "notice_pull2.py 生成，研究用（第四十四轮）"
+  pull:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            notice_pull2.py
+            notice_codes.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas akshare
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TEST: ${{ github.event.inputs.test }}
+        run: python notice_pull2.py --shard ${{ matrix.shard }} --nshards ${{ github.event.inputs.nshards }}
