@@ -1,0 +1,40 @@
+name: 重新生成计划（模型升级后用）
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "计划基准日 YYYYMMDD（收盘日），留空为最新数据日"
+        required: false
+        default: ""
+permissions:
+  contents: write
+concurrency:
+  group: daily-pull
+  cancel-in-progress: false
+jobs:
+  replan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt && (pip install -q mootdx baostock || true)
+      - name: 生成计划
+        run: |
+          D="${{ github.event.inputs.date }}"; if [ -z "$D" ]; then D=$(ls data/daily | tail -1 | cut -c1-8); fi
+          python v1_plan.py --date $D --out data
+          if [ -f data/sim/$D.md ] && ! grep -q "^## 模拟盘" data/plan/$D.md; then { echo; echo; cat data/sim/$D.md; } >> data/plan/$D.md; fi
+          grep -h "特殊状态" data/plan/$D.md | head -1
+      - name: 提交
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/plan data/helper
+          git commit -m "重新生成计划（模型升级）" || echo "无变化"
+          git pull --rebase && git push
+      - name: 清 jsDelivr 缓存
+        if: always()
+        run: |
+          for p in data/helper/latest.json data/helper/rules.json helper/core.py; do curl -s -m 20 "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$p" || true; echo; done
