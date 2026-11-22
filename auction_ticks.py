@@ -12,6 +12,8 @@ BJ = dt.timezone(dt.timedelta(hours=8))
 now = lambda: dt.datetime.now(BJ)
 day = now().strftime('%Y%m%d')
 OUT = 'data/auction_ticks'; os.makedirs(OUT, exist_ok=True)
+OUTF = 'data/auction_full'; os.makedirs(OUTF, exist_ok=True)
+FULL_AT = ['09:20:05', '09:23:00', '09:24:50', '09:25:10']   # 全市场快照时刻（研究：竞价阶段能否提前判断开关档位）
 
 
 def limit_rate(code, name):
@@ -36,7 +38,8 @@ def watch_list():
         print('读计划候选失败', e)
     codes = list(dict.fromkeys(cand + zt + strong + top))
     print(f'基准日 {os.path.basename(f)[:8]}：涨停 {len(zt)}、强势 {len(strong)}、候选 {len(cand)}、观察共 {len(codes)} 只')
-    return codes, os.path.basename(f)[:8]
+    full = d.code.tolist()
+    return codes, os.path.basename(f)[:8], full
 
 
 def sym(c): return ('sh' if c.startswith(('6', '9')) else 'sz') + c
@@ -63,27 +66,40 @@ def snap(codes, S):
 
 
 def main():
-    codes, base = watch_list()
+    codes, base, full = watch_list()
     if os.environ.get('TEST'):
         S = requests.Session(); S.headers['User-Agent'] = 'Mozilla/5.0'
-        r = pd.DataFrame(snap(codes, S)); print(r.head(8).to_string()); print('取到', len(r), '只'); return
+        r = pd.DataFrame(snap(codes, S)); print(r.head(8).to_string()); print('取到', len(r), '只')
+        t0 = time.time(); rf = snap(full, S); print(f'全市场快照 {len(rf)} / {len(full)} 只，用时 {time.time()-t0:.1f}s'); return
     if now().strftime('%H%M') > '0930':
         print('已过竞价时间，退出'); return
     while now().strftime('%H:%M:%S') < '09:14:50': time.sleep(5)
     S = requests.Session(); S.headers['User-Agent'] = 'Mozilla/5.0'
-    allrows = []; n = 0
+    allrows = []; n = 0; fullrows = []; done = set()
+    def full_snap(tag):
+        try:
+            t1 = time.time(); r = snap(full, S); fullrows.extend(r); print(tag, f'全市场快照 {len(r)} 只，{time.time()-t1:.1f}s', flush=True)
+        except Exception as e:
+            print(tag, '全市场快照失败', e)
     while now().strftime('%H:%M:%S') <= '09:26:00':
+        hms = now().strftime('%H:%M:%S')
+        for ft in FULL_AT:
+            if hms >= ft and ft not in done: done.add(ft); full_snap(ft)
         t0 = time.time(); r = snap(codes, S); allrows += r; n += 1
         if n % 6 == 1: print(now().strftime('%H:%M:%S'), f'快照 {len(r)} 只')
         time.sleep(max(0, 10 - (time.time() - t0)))
     # 9:30–9:31 开盘第一分钟再记两次，方便对照
     while now().strftime('%H:%M:%S') < '09:30:20': time.sleep(5)
-    allrows += snap(codes, S); time.sleep(40); allrows += snap(codes, S)
+    allrows += snap(codes, S); full_snap('09:30:20'); time.sleep(30); allrows += snap(codes, S); full_snap('09:31')
     df = pd.DataFrame(allrows)
     if df.empty or (df.qdate != day).mean() > 0.5:
         print('今天不是交易日或行情日期不对，不保存'); return
     df = df[df.qdate == day]
     df.to_csv(f'{OUT}/{day}.csv.gz', index=False, compression='gzip')
+    if fullrows:
+        fd = pd.DataFrame(fullrows); fd = fd[fd.qdate == day][['t', 'code', 'price', 'pc', 'open', 'vol', 'amount', 'b1v', 'a1v']]
+        fd.to_csv(f'{OUTF}/{day}.csv.gz', index=False, compression='gzip')
+        print(f'已保存 {OUTF}/{day}.csv.gz：{fd.code.nunique()} 只 × {fd.t.nunique()} 个时点')
     print(f'已保存 {OUT}/{day}.csv.gz：{df.code.nunique()} 只 × {df.t.nunique()} 个时点（基准日 {base}）')
 
 

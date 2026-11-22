@@ -28,6 +28,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/auction_ticks || true
+          git add data/auction_ticks data/auction_full || true
           git commit -m "竞价过程 $(TZ=Asia/Shanghai date +%Y%m%d)" || exit 0
           for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
