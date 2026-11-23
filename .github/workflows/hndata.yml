@@ -1,0 +1,24 @@
+name: 股东户数与限售解禁（研究用）
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            hn_pull.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas requests
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          gh release view hndata -R ${{ github.repository }} || gh release create hndata -R ${{ github.repository }} -t "股东户数与解禁数据" -n "hn_pull.py 生成，研究用（第五十九轮）"
+          python hn_pull.py
