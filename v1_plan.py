@@ -309,6 +309,15 @@ def main():
         for col in ['板块', '板块涨幅', '板块量比', '板块20日', '板块提示']: P[col] = P['代码'].map(lambda c: BV.get(c, {}).get(col))
         P['说明'] = [f"{w}【{BV[c]['板块']} 今天量比 {BV[c]['板块量比']}、20日 {BV[c]['板块20日']:+.0f}%：{BV[c]['板块提示'][1:]}，次日容易分歧，可少买或不买】" + ' ' + str(x) if c in BV and BV[c]['板块提示'] else x
                        for c, x, w in zip(P['代码'], P['说明'], ['⚠'] * len(P))]
+    # 筹码结构（v1.7 观察项，不影响买入）：控盘 / 筹码分散，研究见 research_log 第五十八轮
+    if len(P):
+        try:
+            import chip
+            CH = chip.annotate(list(P['代码'].unique()), out=a.out)
+        except Exception as ex:
+            print('筹码标注失败', ex); CH = {}
+        P['筹码'] = P['代码'].map(lambda c: CH.get(c, {}).get('label', '未取到'))
+        P['说明'] = [f"{x}【筹码（v1.7 观察）：{h}】" for x, h in zip(P['说明'], P['筹码'])]
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P['优先级'] = P.groupby('src').cumcount() + 1          # 路线内执行顺序 = 加入顺序（与回测、模拟盘、开单工具一致）
     if len(P): P.drop(columns='rk').to_csv(os.path.join(a.out, 'plan', f'{D}.csv'), index=False, encoding='utf-8-sig')
