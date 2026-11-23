@@ -313,10 +313,10 @@ def main():
     if len(P):
         try:
             import chip
-            CH = chip.annotate(list(P['代码'].unique()), out=a.out)
+            CH = chip.annotate(list(P.groupby('src').head(15)['代码'].unique()), out=a.out)   # 每条路线前 15 只（实际只会买前几只）
         except Exception as ex:
             print('筹码标注失败', ex); CH = {}
-        P['筹码'] = P['代码'].map(lambda c: CH.get(c, {}).get('label', '未取到'))
+        P['筹码'] = P['代码'].map(lambda c: CH.get(c, {}).get('label', '未标注'))
         P['说明'] = [f"{x}【筹码（v1.7 观察）：{h}】" for x, h in zip(P['说明'], P['筹码'])]
     os.makedirs(os.path.join(a.out, 'plan'), exist_ok=True)
     if len(P): P['优先级'] = P.groupby('src').cumcount() + 1          # 路线内执行顺序 = 加入顺序（与回测、模拟盘、开单工具一致）
