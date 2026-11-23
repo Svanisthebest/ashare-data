@@ -4,8 +4,8 @@
  "md": "data/plan/20261123.md",
  "rules": "data/helper/rules.json",
  "version": "v1.6",
- "csv_sha256": "6412933afe107994",
+ "csv_sha256": "926132bf9f898309",
  "rules_sha256": "dbbd66c9f59d4ca2",
  "universe": "data/helper/universe.txt",
- "generated": "2026-11-23 11:43 UTC"
+ "generated": "2026-11-23 12:02 UTC"
 }
