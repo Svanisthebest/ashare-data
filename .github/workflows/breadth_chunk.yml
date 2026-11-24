@@ -1,0 +1,31 @@
+name: 盘中市场宽度样本（分块，研究用）
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        chunk: [0,1,2,3,4,5,6,7,8,9]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            breadth_pull.py
+            data/helper/breadth_sample.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas baostock
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CHUNK: ${{ matrix.chunk }}
+        run: |
+          gh release view breadth -R ${{ github.repository }} || gh release create breadth -R ${{ github.repository }} -t "盘中宽度样本" -n "breadth_pull.py 生成，研究用" || true
+          python breadth_pull.py

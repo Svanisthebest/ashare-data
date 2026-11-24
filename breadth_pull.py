@@ -2,6 +2,8 @@
    输出 breadth_min.csv.gz（date, code, t0935, t1000, t1030, t1100, t1400, close），上传 Release breadth。"""
 import baostock as bs, pandas as pd, subprocess, os, time
 S=pd.read_csv('data/helper/breadth_sample.csv',dtype=str).code.tolist()
+CH=int(os.environ.get('CHUNK','-1'))
+if CH>=0: S=S[CH*30:(CH+1)*30]
 KEEP={'093500000':'t0935','100000000':'t1000','103000000':'t1030','110000000':'t1100','140000000':'t1400','150000000':'close'}
 bs.login(); rows=[]
 for i,c in enumerate(S):
@@ -16,7 +18,8 @@ for i,c in enumerate(S):
     if i%20==0: print(i,len(rows),flush=True)
 bs.logout()
 D=pd.DataFrame(rows,columns=['date','code','k','p']).pivot_table(index=['date','code'],columns='k',values='p',aggfunc='first').reset_index()
-D.to_csv('breadth_min.csv.gz',index=False,compression='gzip'); print(D.shape)
+FN=f'breadth_min_{CH:02d}.csv.gz' if CH>=0 else 'breadth_min.csv.gz'
+D.to_csv(FN,index=False,compression='gzip'); print(D.shape)
 R=os.environ['GITHUB_REPOSITORY']
 subprocess.run(f'gh release view breadth -R {R} || gh release create breadth -R {R} -t "盘中宽度样本" -n "breadth_pull.py 生成，研究用"',shell=True)
-subprocess.run(['gh','release','upload','breadth','breadth_min.csv.gz','--clobber','-R',R],check=True)
+subprocess.run(['gh','release','upload','breadth',FN,'--clobber','-R',R],check=True)
